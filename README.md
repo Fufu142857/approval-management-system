@@ -1,7 +1,11 @@
 # 企业审批系统 · B/S 课程作业
 
 依据 [Assignment.pdf](Assignment.pdf) 与 [Design.pdf](Design.pdf) 分阶段开发。
-当前轮次：**S0 仓库与需求基线 + S1 工程骨架**。尚未实现登录、数据库、三类审批或自定义流程。
+已完成：**S0 仓库与需求基线 + S1 工程骨架**。本轮在 S1 验收点暂停；下一轮为 S2 用户与组织。尚未实现登录、数据库、三类审批或自定义流程。
+
+独立远程：[Fufu142857/approval-management-system](https://github.com/Fufu142857/approval-management-system)。
+
+本地工程目录是 `B_S/approval-management-system/`，以下命令都在该子目录中执行。`B_S/` 中保留两份 PDF 原件，仓库内保留参考副本。
 
 ## 开发资料
 

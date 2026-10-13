@@ -2,18 +2,33 @@
 
 ## 两层仓库的决定
 
-采用“父仓库忽略 B_S，B_S 独立管理”的方式。它比 submodule 更适合当前单人课程作业：独立克隆、提交、打包，不需要每次开发后再更新父仓库的子模块指针。
+采用“父仓库只忽略工程子文件夹，工程独立管理”的方式。它比 submodule 更适合当前单人课程作业：独立克隆、提交、打包，不需要每次开发后再更新父仓库的子模块指针。
 
-父仓库此前跟踪 B_S/Assignment.pdf，因此只添加忽略规则不足以隔离。已在父仓库加入 `/B_S/`，并通过 `git rm --cached -- B_S/Assignment.pdf` 取消其索引，磁盘原件保留。父仓库历史里的原版本仍在，未重写历史。这次变更单独提交为 `62970e0`，未推送父仓库。
+目录结构：
+
+```text
+ZJU_26_Aut-Win/                 # 父课程仓库
+  B_S/
+    Assignment.pdf             # 原件，继续由父仓库跟踪
+    Design.pdf                 # 原件，保持原先未跟踪状态
+    approval-management-system/ # 独立工程仓库
+      .git/
+      Assignment.pdf           # 版本化参考副本
+      Design.pdf               # 版本化参考副本
+      src/
+      docs/
+```
+
+父仓库现在只忽略 `/B_S/approval-management-system/`。首次误将整个 B_S 隔离的提交为 `62970e0`，已通过纠正提交 `745e30f` 缩小忽略范围并恢复原 Assignment.pdf 跟踪；未重写历史，未推送父仓库。工程原有 .git 与工作文件已整体迁移，提交历史保留。
 
 依据：[Git 官方 gitignore 文档](https://git-scm.com/docs/gitignore)。
 
-从父仓库克隆不会自动得到 B_S。新电脑需要另行克隆作业仓库；如果以后确实需要父仓库锁定作业版本，再考虑 submodule。不要在父仓库用 `git add -f B_S`，不要把内层 .git 当普通文件复制提交到父仓库。
+从父仓库克隆会保留其跟踪的课程资料，但不会自动得到工程子目录。新电脑在 B_S 中另行克隆作业仓库；如果以后确实需要父仓库锁定作业版本，再考虑 submodule。不要在父仓库强制添加被忽略的工程目录，不要把内层 .git 当普通文件复制提交到父仓库。
 
 ## 每阶段的真实记录
 
-1. 在 B_S 中确认 `git rev-parse --show-toplevel` 指向 B_S，而不是上层目录。
-2. 从现有基线创建 `codex/sNN-description` 阶段分支。
+1. 进入 B_S/approval-management-system，确认 `git rev-parse --show-toplevel` 指向该工程子目录，而不是 B_S 或课程总目录。
+2. 从现有基线创建 `stage/sNN-description` 阶段分支。按用户要求，分支名不包含 Codex、AI 或其他助手标识；AI 使用声明保留在开发记录中。
 3. 完成本阶段的小增量，执行对应检查，记录实际结果和未解决问题。
 4. 精确暂存该阶段文件，检查 `git diff --cached`，提交 `feat:` / `fix:` / `test:` / `docs:` / `chore:`。
 5. 有独立 origin 时推送阶段分支；验收后快进合并到 main，并推送 main。保留阶段提交，不 squash 成一个成品提交。
@@ -24,10 +39,12 @@
 
 ## 配置远程
 
-等待用户提供独立 SSH/HTTPS URL；不得把父仓库 origin 复制过来。下列 REMOTE_URL 为占位符，先替换再执行。
+用户已指定独立远程：[approval-management-system](https://github.com/Fufu142857/approval-management-system)。配置的 origin 为 `https://github.com/Fufu142857/approval-management-system.git`；初始化检查远程为空。不得把父仓库 origin 复制过来。
+
+当前仓库已配置 origin；以下命令仅供在其他机器重新配置时参考，已有 origin 不重复 add。
 
 ```sh
-git remote add origin REMOTE_URL
+git remote add origin https://github.com/Fufu142857/approval-management-system.git
 git remote -v
 git push -u origin main
 git push -u origin HEAD
