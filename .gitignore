@@ -1,0 +1,22 @@
+# Local tools and build output
+.DS_Store
+node_modules/
+.pnpm-store/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+*.log
+tmp/
+
+# Secrets and runtime data
+.env
+.env.*
+!.env.example
+uploads/
+data/
+*.db
+*.sqlite*
+
+# Generated submission bundles (Git history is exported on demand)
+output/
