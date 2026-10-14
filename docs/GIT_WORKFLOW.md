@@ -35,6 +35,18 @@ ZJU_26_Aut-Win/                 # 父课程仓库
 
 提交时间使用真实时间。用户原创 PDF 与 AI 协助的实现分别说明来源，不能把 AI 写的代码描述为人工独立实现。人工模块由用户自行编写并提交，提交前关闭该模块中的 AI 补全。
 
+## 开发节奏与作者署名
+
+Git 历史用于展示实际迭代过程，不要求每天恰好一次提交。一次学习或开发时间可以完成一个小增量，也可以针对不同问题产生多次提交；没有开发成果的日子不必提交。不要倒填日期、空提交打卡，或先完成整套系统再拆出虚假的开发过程。
+
+本项目当前以 S2a 数据库基础作为检查点，随后依次开发 S2b 认证与权限、S2c 页面和综合验收。每次继续前先阅读上一增量的代码与验证记录；一次提交说明一个可以被核对的变化，每个通过验收的增量上传远程备份。
+
+GitHub 的协作者权限与作者署名是不同机制。展示贡献不需要邀请额外账号或赋予写入权限。当前已实测 GitHub 将 `Codex <noreply@openai.com>` 关联到 `codex` 身份：用户为主作者的协作提交保留用户作者并添加 Codex 共同作者；由 Codex 主要撰写的独立增量使用 Codex 作者身份，用户仍是提交人。用户原创设计与人工模块不会被归为 AI 作者。
+
+提交层面的共同作者显示和仓库侧栏的贡献者统计并不完全相同。后者由 GitHub 根据默认分支上的提交和关联账号统计，显示也可能有延迟；不能以邀请权限或 README 文字代替真实作者信息。
+
+参考：[GitHub 多作者提交](https://docs.github.com/en/pull-requests/how-tos/commit-changes/creating-a-commit-with-multiple-authors)、[贡献者统计说明](https://docs.github.com/en/repositories/viewing-activity-and-data-for-your-repository/viewing-a-projects-contributors)。
+
 作业第 4 页要求“代码用 git 进行管理”“包含 git 相关信息（如 git log 日志）”，没有规定必须每次修改都 push。建议每个验收阶段 push 一次，较长阶段在有意义的里程碑追加提交和备份。
 
 ## 配置远程

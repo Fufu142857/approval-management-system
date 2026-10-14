@@ -40,7 +40,7 @@ pnpm test
 
 ## 开发与署名
 
-项目由 Fufu 主导，Codex 提供允许范围内的 AI 编程协助。用户的设计与独立实现部分保留真实归属；Codex 实际参与的新提交添加 `Co-authored-by: Codex <noreply@openai.com>`，不修改主作者身份。
+项目由 [Fufu](https://github.com/Fufu142857) 主导，[Codex](https://github.com/codex) 提供允许范围内的 AI 编程协助。用户的设计与独立实现部分保留真实归属；协作提交使用共同作者署名，由 Codex 主要撰写的独立增量使用 Codex 作者身份。详见 [署名规则](docs/GIT_WORKFLOW.md)。
 
 开发按可验证的功能增量提交，不要求每天固定提交，不伪造时间或补造历史。每个增量记录变化、测试结果与限制；经过验证的进度推送到远程。
 
