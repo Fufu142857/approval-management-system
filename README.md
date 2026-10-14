@@ -1,7 +1,7 @@
 # 企业审批系统 · B/S 课程作业
 
 依据本地外层目录中的作业要求与设计文档分阶段开发。两份 PDF 是隐私资料，不随仓库发布；本地路径为 `../Assignment.pdf` 与 `../Design.pdf`。
-已完成：**S0 仓库与需求基线 + S1 工程骨架**。本轮在 S1 验收点暂停；下一轮为 S2 用户与组织。尚未实现登录、数据库、三类审批或自定义流程。
+已完成：**S0 仓库与需求基线、S1 工程骨架、S2a 数据库基础**。S2 仍在进行中，下一增量为 S2b 注册、登录与管理员确认。尚未实现认证页面、三类审批或自定义流程。
 
 独立远程：[Fufu142857/approval-management-system](https://github.com/Fufu142857/approval-management-system)。
 
@@ -15,6 +15,7 @@
 - [代码风格与接口约定](docs/CONTRIBUTING.md)
 - [人工模块交接约束](docs/HUMAN_HANDOFF.md)
 - [真实开发记录](docs/DEVELOPMENT_LOG.md)
+- [数据库初始化与本地运行](docs/DATABASE.md)
 
 ## 本地开发
 
@@ -32,9 +33,16 @@ pnpm lint
 pnpm typecheck
 pnpm format:check
 pnpm build
+pnpm test
 ```
 
-S2 起加入 PostgreSQL 迁移、初始化数据、认证、权限及有意义的 Vitest 测试。Docker Compose 随 S2 基础服务接入，最终独立环境重建在 S8 验收。
+测试前按 [数据库说明](docs/DATABASE.md) 设置独立 TEST_DATABASE_URL。S2a 已加入 PostgreSQL 迁移、幂等初始化和数据库/密码测试；Docker Compose 数据库配置已提供，本机原生 PostgreSQL 已验证，Docker 引擎运行验证仍待完成。认证和权限功能在后续 S2 增量实现。
+
+## 开发与署名
+
+项目由 Fufu 主导，Codex 提供允许范围内的 AI 编程协助。用户的设计与独立实现部分保留真实归属；Codex 实际参与的新提交添加 `Co-authored-by: Codex <noreply@openai.com>`，不修改主作者身份。
+
+开发按可验证的功能增量提交，不要求每天固定提交，不伪造时间或补造历史。每个增量记录变化、测试结果与限制；经过验证的进度推送到远程。
 
 ## 独立实现约束
 
