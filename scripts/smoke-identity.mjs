@@ -1,0 +1,166 @@
+import assert from "node:assert/strict";
+import { spawn, execFileSync } from "node:child_process";
+import { Pool } from "pg";
+import { loadEnvFile } from "node:process";
+loadEnvFile(".env");
+assert(new URL(process.env.TEST_DATABASE_URL).pathname.endsWith("_test"));
+execFileSync(
+  process.execPath,
+  ["node_modules/tsx/dist/cli.mjs", "scripts/database.ts", "migrate"],
+  {
+    env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL },
+  },
+);
+// Build our own fixture: other test files deliberately exercise a different admin password.
+const fixture = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
+await fixture.query(
+  "TRUNCATE admin_audit_logs,sessions,user_roles,users,departments,auth_rate_limits CASCADE",
+);
+await fixture.end();
+execFileSync(
+  process.execPath,
+  ["node_modules/tsx/dist/cli.mjs", "scripts/database.ts", "seed"],
+  {
+    env: {
+      ...process.env,
+      DATABASE_URL: process.env.TEST_DATABASE_URL,
+      ADMIN_INITIAL_PASSWORD: "Test-user-password",
+    },
+  },
+);
+const origin = "http://127.0.0.1:3100";
+const child = spawn(
+  process.execPath,
+  [
+    "node_modules/next/dist/bin/next",
+    "start",
+    "--hostname",
+    "127.0.0.1",
+    "--port",
+    "3100",
+  ],
+  {
+    env: {
+      ...process.env,
+      DATABASE_URL: process.env.TEST_DATABASE_URL,
+      APP_ORIGIN: origin,
+      SESSION_COOKIE_SECURE: "false",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  },
+);
+let output = "";
+child.stdout.on("data", (chunk) => (output += chunk));
+child.stderr.on("data", (chunk) => (output += chunk));
+const closed = new Promise((resolve) => child.on("close", resolve));
+async function call(path, method = "GET", body, token, cookie) {
+  const response = await fetch(`${origin}/api/${path}`, {
+    method,
+    signal: AbortSignal.timeout(10000),
+    headers: {
+      "Content-Type": "application/json",
+      Origin: origin,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  return { response, body: await response.json() };
+}
+try {
+  for (let i = 0; i < 100; i++) {
+    if (child.exitCode !== null)
+      throw new Error("Test server exited: " + output);
+    if (output.includes("Ready")) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert(output.includes("Ready"), "Test server did not become ready");
+  const departments = await call("departments");
+  assert.equal(departments.response.status, 200);
+  const departmentId = departments.body.data[0].id;
+  const username = `smoke_${Date.now()}`;
+  const password = "Test-user-password";
+  const registration = await call("auth/register", "POST", {
+    username,
+    fullName: "HTTP 验收",
+    email: `${username}@example.invalid`,
+    password,
+    requestedDepartmentId: departmentId,
+  });
+  assert.equal(registration.response.status, 201);
+  const id = registration.body.data.id;
+  const login = await call("auth/login", "POST", {
+    username,
+    password,
+    client: "mobile",
+  });
+  assert.equal(login.response.status, 200);
+  const oldToken = login.body.data.token;
+  assert.equal(
+    (await call("auth/me", "GET", undefined, oldToken)).body.data.status,
+    "pending",
+  );
+  const admin = await call("auth/login", "POST", {
+    username: "admin",
+    password,
+  });
+  assert.equal(admin.response.status, 200);
+  const cookie = admin.response.headers.get("set-cookie").split(";")[0];
+  assert.equal(admin.body.data.token, undefined);
+  const change = await call(
+    `admin/users/${id}/access`,
+    "PATCH",
+    {
+      departmentId,
+      status: "active",
+      roles: ["employee"],
+      reason: "生产 HTTP 接口验收",
+    },
+    undefined,
+    cookie,
+  );
+  assert.equal(change.response.status, 200);
+  assert.equal(
+    (await call("auth/me", "GET", undefined, oldToken)).response.status,
+    401,
+  );
+  const renewed = await call("auth/login", "POST", {
+    username,
+    password,
+    client: "mobile",
+  });
+  const token = renewed.body.data.token;
+  assert.equal(
+    (await call("auth/me", "GET", undefined, token)).body.data.status,
+    "active",
+  );
+  assert.equal(
+    (await call("admin/users", "GET", undefined, token)).response.status,
+    403,
+  );
+  assert.equal(
+    (await call("admin/audit-logs", "GET", undefined, undefined, cookie))
+      .response.status,
+    200,
+  );
+  assert.equal(
+    (await call("auth/logout", "POST", undefined, token)).response.status,
+    200,
+  );
+  assert.equal(
+    (await call("auth/me", "GET", undefined, token)).response.status,
+    401,
+  );
+  assert.equal(
+    (await call("auth/logout", "POST", undefined, undefined, cookie)).response
+      .status,
+    200,
+  );
+  console.log(
+    "Production HTTP smoke passed: register, Cookie/Bearer login, confirmation, revocation, authorization, audit, logout.",
+  );
+} finally {
+  child.kill("SIGTERM");
+  await closed;
+}

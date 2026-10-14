@@ -1,7 +1,7 @@
 # 企业审批系统 · B/S 课程作业
 
 依据本地外层目录中的作业要求与设计文档分阶段开发。两份 PDF 是隐私资料，不随仓库发布；本地路径为 `../Assignment.pdf` 与 `../Design.pdf`。
-已完成：**S0 仓库与需求基线、S1 工程骨架、S2a 数据库基础**。S2 仍在进行中，下一增量为 S2b 注册、登录与管理员确认。尚未实现认证页面、三类审批或自定义流程。
+已完成：**S0 仓库与需求基线、S1 工程骨架、S2a 数据库基础、S2b 认证与管理权限后端**。下一步是 S2c 页面接入，具体检查点见 [当前进度](docs/STATUS.md)。尚未实现认证页面、三类审批或自定义流程。
 
 独立远程：[Fufu142857/approval-management-system](https://github.com/Fufu142857/approval-management-system)。
 
@@ -9,6 +9,8 @@
 
 ## 开发资料
 
+- [当前进度与新 Agent 接续入口（先读）](docs/STATUS.md)
+- [已有 HTTP 接口与认证约定](docs/API.md)
 - [阶段计划与验收条件](docs/DEVELOPMENT_PLAN.md)
 - [需求追踪与设计差异](docs/REQUIREMENTS.md)
 - [Git 管理、上传与交付](docs/GIT_WORKFLOW.md)
@@ -34,9 +36,10 @@ pnpm typecheck
 pnpm format:check
 pnpm build
 pnpm test
+pnpm test:http
 ```
 
-测试前按 [数据库说明](docs/DATABASE.md) 设置独立 TEST_DATABASE_URL。S2a 已加入 PostgreSQL 迁移、幂等初始化和数据库/密码测试；Docker Compose 数据库配置已提供，本机原生 PostgreSQL 已验证，Docker 引擎运行验证仍待完成。认证和权限功能在后续 S2 增量实现。
+测试前按 [数据库说明](docs/DATABASE.md) 设置独立 TEST_DATABASE_URL。`test:http` 需要先 build，自动在 127.0.0.1:3100 启动/停止生产服务；两类测试均清空测试库身份数据，不要并行运行。已有 PostgreSQL 迁移、幂等初始化以及数据库/密码/身份接口测试。Docker Compose 数据库配置已提供，本机原生 PostgreSQL 已验证，Docker 引擎运行验证仍待完成。页面接入将在 S2c 实现。
 
 ## 开发与署名
 

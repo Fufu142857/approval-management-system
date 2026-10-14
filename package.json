@@ -17,13 +17,15 @@
     "db:migrate": "tsx scripts/database.ts migrate",
     "db:seed": "tsx scripts/database.ts seed",
     "test": "vitest run",
+    "test:http": "node scripts/smoke-identity.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
     "next": "16.4.0",
     "pg": "8.23.1",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
