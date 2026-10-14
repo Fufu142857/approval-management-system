@@ -1,6 +1,6 @@
 # 身份与组织 HTTP 接口
 
-S2b 实现范围；验收状态见 [STATUS.md](STATUS.md)。尚无审批、附件、通知或自定义流程接口。所有成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 接口范围，S2c Web 页面已接入，未更改 HTTP 契约；验收状态见 [STATUS.md](STATUS.md)，页面路径与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。尚无审批、附件、通知或自定义流程接口。所有成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 

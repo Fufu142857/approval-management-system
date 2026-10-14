@@ -18,6 +18,7 @@
     "db:seed": "tsx scripts/database.ts seed",
     "test": "vitest run",
     "test:http": "node scripts/smoke-identity.mjs",
+    "test:e2e": "playwright test",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -28,6 +29,7 @@
     "zod": "4.6.6"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.0",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",

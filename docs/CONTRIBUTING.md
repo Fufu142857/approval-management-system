@@ -1,13 +1,13 @@
 # 代码风格与公共接口约定
 
-这些是后续实现约定；实际存在的接口单独列在 docs/HUMAN_HANDOFF.md。当前没有业务 API。
+这些是实现约定；已有身份 API 见 docs/API.md，页面接入见 docs/WEB_IDENTITY.md，人工模块边界见 docs/HUMAN_HANDOFF.md。审批业务接口尚未实现。
 
 ## 工程与命名
 
 - TypeScript strict；使用 ES module。React 函数组件，优先服务端组件，需要交互时才使用客户端组件。
 - 格式由 Prettier 统一：两空格、双引号、分号、尾逗号。组件 PascalCase，变量/函数 camelCase，普通模块文件 kebab-case；Next 路由遵循 page.tsx、layout.tsx、route.ts 约定。
 - 数据库表与列 snake_case；API JSON 字段 camelCase，标识使用 UUID 字符串。中文界面、英文代码标识；注释解释约束与原因。
-- `src/app` 放路由与页面，未来 `src/components` 放共享 UI，`src/server` 放数据库和业务服务，`src/lib` 放无环境依赖的公共工具；小程序未来独立放 `miniprogram`。
+- `src/app` 放路由与页面，`src/components` 放共享 UI，`src/server` 放数据库和业务服务，`src/lib` 放公共类型/校验与客户端请求工具（api-client.ts 仅在客户端使用）；小程序未来独立放 `miniprogram`。
 - 页面不直接访问数据库；Route Handler 负责 HTTP 边界，服务层负责授权、业务规则与事务。服务端模块不能被客户端组件导入。
 - Next.js 16 官方文档：[安装](https://nextjs.org/docs/app/getting-started/installation)。Tailwind 4 配置：[PostCSS 集成](https://tailwindcss.com/docs/installation/using-postcss)。
 
@@ -19,7 +19,7 @@
 - 金额传十进制字符串（如 `"1250.30"`），数据库 `NUMERIC(14,2)`，运算使用精确十进制或整数分；不能用 JavaScript 浮点合计决定审批路径。
 - 日期传 `YYYY-MM-DD`；时间点传含时区 ISO 8601，数据库 TIMESTAMPTZ。差旅天数按自然日含首尾，按 Asia/Shanghai 解释，服务端计算。
 - 申请人、所属部门、实际审批人、系统编号和时间由服务端确定。客户端传同名身份字段也不能取得额外权限。
-- Web 与小程序共用鉴权和服务层。会话传递方式在 S2 实现并记录；没有正式认证接口前，不能以客户端固定用户 ID 代替认证。
+- Web 与小程序共用鉴权和服务层。Web 使用 HttpOnly Cookie，小程序协议使用 Bearer，详见 API.md；不能以客户端固定用户 ID 代替认证。页面不要导入数据库模块，服务端页面通过 page-auth.ts 做检查，管理 API 保留独立鉴权。
 
 ## 一致性、安全与质量
 

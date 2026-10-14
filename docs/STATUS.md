@@ -4,10 +4,10 @@
 
 ## 当前检查点
 
-- 已验收：S0、S1、S2a、S2b；本轮开始时的已提交基线为 `534b5a3`。S2 整体尚未完成。
-- 当前检查点：S2b 认证和管理权限后端，阶段分支 `stage/s02b-auth`。本检查点的准确提交使用 `git log -1 --format='%h %s' -- docs/STATUS.md` 查询，避免提交在自身文件中引用自身哈希；本地未提交时以 `git status` 为准。
-- 本轮范围：注册、用户名登录、Cookie/Bearer 会话、退出、个人资料查询、部门/角色字典、管理员用户分页、确认部门/授权/禁用、审计分页。接口契约见 [API.md](API.md)。
-- 下一增量：S2c 注册/登录/待确认/个人信息页面和管理员用户/审计页面，复用本轮接口与校验；补齐浏览器操作验收后才能宣布 S2 完成。
+- 已验收：S0、S1、S2a、S2b、S2c；本轮开始时的已提交基线为 `d829516`。S2 身份与组织功能已完成；Docker 运行仍未验收。
+- 当前检查点：S2c 身份管理页面与浏览器验收，阶段分支 `stage/s02c-identity-ui`。本检查点的准确提交使用 `git log -1 --format='%h %s' -- docs/STATUS.md` 查询，避免提交在自身文件中引用自身哈希；本地未提交时以 `git status` 为准。
+- 本轮范围：注册、登录、待确认/个人信息、管理员用户和审计页面、授权确认与取消、分页/错误/会话失效状态、手机布局；接口仍沿用 S2b，见 [API.md](API.md)，页面与测试见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。
+- 下一增量：S3a 固定差旅的数据模型、草稿接口和校验。先复核外层设计中的差旅字段、金额/日期规则、编号分配时机，再实现一个可验证增量；后续逐步接入提交、固定顺序审批、附件和通知，不一次完成整个 S3，更不能加入动态模板解释器。
 - 尚未开始：三类固定审批、附件、通知、统计、自定义流程、小程序和 OCR。
 
 ## 接续顺序
@@ -19,9 +19,9 @@
 
 ## 验证与环境
 
-S2b 的 16 项数据库/身份接口测试、lint、类型/格式检查、生产构建和真实 HTTP 身份闭环已通过；具体记录见 DEVELOPMENT_LOG.md。常用命令：`pnpm test`、`pnpm lint`、`pnpm typecheck`、`pnpm format:check`、`pnpm build`；构建后运行 `pnpm test:http` 验证真实 HTTP。两类集成测试均会清空身份数据，**仅允许使用独立、名称以 `_test` 结尾的 TEST_DATABASE_URL**，不得指向开发或交付数据库，也不要并行运行这两组测试。
+S2c 已通过 16 项数据库/身份测试、5 组真实浏览器场景、真实 HTTP 闭环、lint、类型/格式检查和生产构建；具体记录见 DEVELOPMENT_LOG.md。常用命令：`pnpm test`、`pnpm lint`、`pnpm typecheck`、`pnpm format:check`、`pnpm build`；构建后依次运行 `pnpm test:http`、`pnpm test:e2e`。本机浏览器命令为 `E2E_BROWSER_CHANNEL=chrome pnpm test:e2e`，其他机器可安装 Playwright Chromium。三类集成测试均会清空身份数据，**仅允许使用独立、名称以 `_test` 结尾的 TEST_DATABASE_URL**，不得指向开发或交付数据库，也不要并行运行。
 
-待下一轮完成：S2c 页面接入、浏览器交互和移动布局验收。本轮没有浏览器页面验收，首页仍是工程骨架；HTTP 通过不能等同于 UI 完成。公开部署的 HTTPS、入口流量限制和 Docker 重建仍在后续部署阶段验收。
+已检查桌面与 390×844 手机视口截图；尚未覆盖其他浏览器或手机真机。首页按会话跳转登录或个人信息。公开部署的 HTTPS、入口流量限制和 Docker 重建仍在后续部署阶段验收。资料修改、密码重置、部门增删改不是当前已提供功能。
 
 本机 PostgreSQL 17 项目实例使用 `tmp/pgdata`、127.0.0.1:55432；数据库为 approval 与 approval_test。不要重新初始化已有集群或覆盖 `.env`；不要使用其他课程或系统默认数据库。数据库本地原生运行已验收，Docker 引擎尚未运行验证。
 
