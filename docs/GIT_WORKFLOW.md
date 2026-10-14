@@ -9,17 +9,17 @@
 ```text
 ZJU_26_Aut-Win/                 # 父课程仓库
   B_S/
-    Assignment.pdf             # 原件，继续由父仓库跟踪
-    Design.pdf                 # 原件，保持原先未跟踪状态
+    Assignment.pdf             # 本地隐私原件，已忽略
+    Design.pdf                 # 本地隐私原件，已忽略
     approval-management-system/ # 独立工程仓库
       .git/
-      Assignment.pdf           # 版本化参考副本
-      Design.pdf               # 版本化参考副本
       src/
       docs/
 ```
 
-父仓库现在只忽略 `/B_S/approval-management-system/`。首次误将整个 B_S 隔离的提交为 `62970e0`，已通过纠正提交 `745e30f` 缩小忽略范围并恢复原 Assignment.pdf 跟踪；未重写历史，未推送父仓库。工程原有 .git 与工作文件已整体迁移，提交历史保留。
+父仓库忽略 `/B_S/approval-management-system/`、`/B_S/Assignment.pdf` 和 `/B_S/Design.pdf`，两份原件不再被当前分支跟踪。按用户要求，父私有仓库旧历史保留且本轮未推送。工程仓库不含 PDF 副本，并在 .gitignore 中忽略这两个文件名。
+
+公开工程仓库曾误包含两份 PDF，已按用户指示从全部分支历史中剔除；阶段提交保留，但提交哈希发生变化。不要从旧克隆合并旧历史；有旧克隆时重新克隆清理后的仓库。原始资料只在本地读取，不得重新加入任何提交。
 
 依据：[Git 官方 gitignore 文档](https://git-scm.com/docs/gitignore)。
 
@@ -63,4 +63,4 @@ git bundle create output/submission/history.bundle --all
 git bundle verify output/submission/history.bundle
 ```
 
-源代码压缩包、设计文档、使用手册、测试报告、Docker 配置及演示视频一并整理。`git archive` 不包含 .git；仅交 ZIP 不能替代 Git 历史，需同时提供日志与 bundle，或按老师要求附带 .git。最终提交须排除依赖缓存、上传票据、凭据和运行数据。
+公开仓库只整理可公开的代码和开发文档。设计文档等隐私材料由用户通过课程指定的非公开渠道另行提交，不得加入公开仓库或公开发布附件。`git archive` 不包含 .git；仅交 ZIP 不能替代 Git 历史，需同时提供日志与 bundle，或按老师要求附带 .git。最终提交须排除依赖缓存、上传票据、凭据和运行数据。

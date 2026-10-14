@@ -11,6 +11,8 @@ coverage/
 tmp/
 
 # Secrets and runtime data
+Assignment.pdf
+Design.pdf
 .env
 .env.*
 !.env.example

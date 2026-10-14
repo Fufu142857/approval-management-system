@@ -1,14 +1,14 @@
 # 本作业的协作约束
 
 开始工作前阅读 README.md、docs/DEVELOPMENT_PLAN.md、docs/DEVELOPMENT_LOG.md 和 docs/HUMAN_HANDOFF.md。
-Assignment.pdf 是验收依据；Design.pdf 是用户已完成的设计。不能把规划当作已实现功能。
+外层 ../Assignment.pdf 是验收依据；../Design.pdf 是用户已完成的设计。两份文件属于隐私资料，只能保留在外层 B_S，不得复制进工程、提交到 Git 或上传公开仓库。不能把规划当作已实现功能。
 
 ## 分阶段开发
 
 - 每轮默认只推进一个可验收阶段。先验证本阶段、更新开发日志，再创建语义明确的 Git 提交，向用户说明下一阶段。
 - 不得一次生成完整作业，再拆分提交伪装成逐步开发；不得伪造提交时间、测试结果或人工作者。
 - 只有配置了用户指定的独立远程仓库后才能推送；不要使用父课程仓库的 origin，不做强制推送。
-- 工程仓库根目录是 B_S/approval-management-system，不是 B_S。B_S 中保留用户的 PDF 原件，仓库中保存对应参考副本。
+- 工程仓库根目录是 B_S/approval-management-system，不是 B_S。B_S 中保留用户的 PDF 原件，仓库中不保存参考副本。不得强制添加被忽略的隐私文件。
 - 提交只包含本阶段文件；保留原 PDF。按用户要求使用 stage/sNN-description 等纯功能名称，分支名不得包含 Codex、AI 或其他助手标识。AI 使用情况记录在开发文档中。
 
 ## 必须由用户独立实现的模块
