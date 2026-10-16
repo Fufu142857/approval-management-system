@@ -11,6 +11,10 @@
 - 页面不直接访问数据库；Route Handler 负责 HTTP 边界，服务层负责授权、业务规则与事务。服务端模块不能被客户端组件导入。
 - Next.js 16 官方文档：[安装](https://nextjs.org/docs/app/getting-started/installation)。Tailwind 4 配置：[PostCSS 集成](https://tailwindcss.com/docs/installation/using-postcss)。
 
+## 界面约定
+
+外观以外层 Design.pdf 为准，修改前查看对应原型，执行 [UI_GUIDELINES.md](UI_GUIDELINES.md) 的对照流程。复用 AccountShell、Icon 与 globals.css 中的公共控件；不得自行引入新配色或替换原型布局。没有独立原型的页面沿用公共规范，并在验收记录中如实说明。
+
 ## HTTP 约定（业务部分待 S2–S4 实现并冻结）
 
 - API 前缀 `/api`，JSON；成功响应 `{ data: ... }`，错误响应 `{ error: { code, message, fieldErrors? } }`。

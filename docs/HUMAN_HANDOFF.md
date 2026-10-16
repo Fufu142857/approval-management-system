@@ -16,7 +16,9 @@ S1 提供 `GET /api/health`，实现文件 `src/app/api/health/route.ts`。无�
 
 S2b 新增注册/登录/退出/个人资料、部门与角色字典、管理员用户分页/确认/授权/禁用及审计查询，实际路径、参数、错误码和源码入口见 [API.md](API.md)。身份类型和输入校验在 `src/lib/identity.ts`，服务端认证在 `src/server/auth.ts`，组织授权事务在 `src/server/admin.ts`。`requireUser` 允许待确认用户，不能直接作为后续业务放行条件；业务还必须检查 active 及实际资源权限。管理员不自动拥有业务审批权。
 
-S2c 页面已接入现有身份服务，页面路由、前端组件、错误/会话约定及浏览器验收见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。这些组件只包含固定身份字段，不包含动态字段生成或自定义模板逻辑。
+S2c 页面已接入现有身份服务，页面路由、前端组件、错误/会话约定及浏览器验收见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。S2d 公共外观、共享组件及设计验收约束见 [UI_GUIDELINES.md](UI_GUIDELINES.md)；用户接棒时也可据此保持统一外观。现有身份页没有各自独立原型，不代表后续业务原型已完成。
+
+这些组件只包含固定身份字段，不包含动态字段生成或自定义模板逻辑。
 
 附件、申请、审批和通知接口仍**未实现**；现有身份能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
 

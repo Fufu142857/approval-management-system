@@ -17,6 +17,10 @@
 
 管理员使用本机 `.env` 的 ADMIN_INITIAL_PASSWORD 登录 admin。建议用另一个浏览器或独立隐私窗口注册员工；管理员确认或修改权限后，员工原有会话失效，需重新登录。管理员不能修改自己的部门/状态/角色。普通员工直接输入管理页面地址也会被服务端拒绝，不只隐藏导航。
 
+从左侧“管理后台”进入用户管理，再使用“用户管理 / 操作审计”标签切换。右上角用户菜单提供个人信息与退出，支持 Escape 关闭。尚未实现的工作台、申请、待办、通知和搜索入口不可用。
+
+S2d 已按设计原型的公共框架调整为黑白灰、四格标志、侧栏、内容顶栏与白色卡片，具体依据和未覆盖部分见 [UI_GUIDELINES.md](UI_GUIDELINES.md)。
+
 页面通过同源 Cookie 调用现有 API，不读取令牌、不将令牌放入 localStorage。受保护页面在服务端校验会话；客户端在进入工作空间、窗口重新聚焦、pageshow 和每 60 秒检查会话，失效时返回登录。管理 API 的 401/403 同样处理；权限变更的最终判断仍在后端。页面交互依赖 JavaScript；未加载脚本时表单使用 POST，避免密码进入 URL。
 
 ## 可重复运行的浏览器验收
@@ -47,7 +51,7 @@ Playwright 在 127.0.0.1:3101 启动生产服务，并使用测试库、测试�
 4. 390×844 手机视口的注册错误、重复账号、普通员工资料和退出。
 5. 手机管理员列表、授权表单及审计详情；页面无水平溢出，宽表格在容器内横向滚动。
 
-自动截图在 `tmp/screenshots/s2c-*.png`；失败截图/trace 在 `tmp/playwright-results/`。均被 Git 忽略，迁移时通过测试重新生成；不得把带真实用户信息的截图或 trace 发布到公开仓库。本轮验收使用本机 Chrome，尚未覆盖 Safari、Firefox 或手机真机。
+自动截图在 `tmp/screenshots/identity-*.png`；失败截图/trace 在 `tmp/playwright-results/`。均被 Git 忽略，迁移时通过测试重新生成；不得把带真实用户信息的截图或 trace 发布到公开仓库。本轮验收使用本机 Chrome，尚未覆盖 Safari、Firefox 或手机真机。
 
 ## 接续开发入口
 
@@ -57,7 +61,7 @@ Playwright 在 127.0.0.1:3101 启动生产服务，并使用测试库、测试�
 - `src/components/account-shell.tsx`：导航、退出、会话刷新；`src/lib/api-client.ts`：同源 API 请求和错误处理。
 - `src/components/users-panel.tsx` / `access-editor.tsx`：用户查询、授权预览与保存；`audit-panel.tsx`：只读审计。
 - `src/components/use-resource.ts`：查询状态和重试；取消旧请求并匹配查询键，避免切页/筛选时旧结果覆盖当前页面。
-- `src/app/globals.css`：共享表单、提示、布局、表格与移动断点。新页面沿用当前风格。
+- `src/app/globals.css`：共享表单、提示、布局、表格与移动断点。新页面按 UI_GUIDELINES.md 和外层原型对照，复用公共控件。
 
 S3 从固定差旅业务开始，不在此阶段加入自定义模板、动态字段或可配置流程。相关人工边界见 HUMAN_HANDOFF.md。
 

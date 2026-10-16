@@ -48,7 +48,7 @@ test("注册、待确认、管理员授权、重新登录、审计和停用闭�
     page.getByRole("heading", { name: "登录审批管理系统" }),
   ).toBeVisible();
   await page.screenshot({
-    path: "tmp/screenshots/s2c-login.png",
+    path: "tmp/screenshots/identity-login.png",
     fullPage: true,
   });
   await page.getByRole("link", { name: "注册账号" }).click();
@@ -71,7 +71,7 @@ test("注册、待确认、管理员授权、重新登录、审计和停用闭�
   await signIn(page, "browser_member");
   await expect(page.getByText("等待管理员确认", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "用户管理", exact: true }),
+    page.getByRole("link", { name: "管理后台", exact: true }),
   ).toHaveCount(0);
   const cookie = (await page.context().cookies()).find(
     (cookie) => cookie.name === "approval_session",
@@ -81,14 +81,14 @@ test("注册、待确认、管理员授权、重新登录、审计和停用闭�
     "approval_session",
   );
   await page.screenshot({
-    path: "tmp/screenshots/s2c-pending.png",
+    path: "tmp/screenshots/identity-pending.png",
     fullPage: true,
   });
   const adminContext = await browser.newContext();
   const admin = await adminContext.newPage();
   try {
     await signIn(admin, "admin");
-    await admin.getByRole("link", { name: "用户管理", exact: true }).click();
+    await admin.getByRole("link", { name: "管理后台", exact: true }).click();
     await admin.getByLabel("状态筛选", { exact: true }).selectOption("pending");
     await admin
       .getByRole("button", { name: "管理 browser_member", exact: true })
@@ -116,7 +116,7 @@ test("注册、待确认、管理员授权、重新登录、审计和停用闭�
     ).toBeChecked();
     await admin.getByRole("button", { name: "检查变更" }).click();
     await admin.screenshot({
-      path: "tmp/screenshots/s2c-access-review.png",
+      path: "tmp/screenshots/identity-access-review.png",
       fullPage: true,
     });
     await admin.getByRole("button", { name: "确认保存" }).click();
@@ -147,10 +147,10 @@ test("注册、待确认、管理员授权、重新登录、审计和停用闭�
       admin.getByText("操作者 ID", { exact: true }).first(),
     ).toBeVisible();
     await admin.screenshot({
-      path: "tmp/screenshots/s2c-audit.png",
+      path: "tmp/screenshots/identity-audit.png",
       fullPage: true,
     });
-    await admin.getByRole("link", { name: "用户管理", exact: true }).click();
+    await admin.getByRole("link", { name: "管理后台", exact: true }).click();
     await admin
       .getByRole("button", { name: "管理 browser_member", exact: true })
       .click();
@@ -183,10 +183,10 @@ test("注册、待确认、管理员授权、重新登录、审计和停用闭�
 
 test("管理分页、网络失败重试、取消不提交与退出保护", async ({ page }) => {
   await signIn(page, "admin");
-  await page.getByRole("link", { name: "用户管理", exact: true }).click();
+  await page.getByRole("link", { name: "管理后台", exact: true }).click();
   await expect(page.getByRole("row")).toHaveCount(11);
   await page.screenshot({
-    path: "tmp/screenshots/s2c-users.png",
+    path: "tmp/screenshots/identity-users.png",
     fullPage: true,
   });
   await page.getByRole("button", { name: "下一页" }).click();
@@ -213,6 +213,7 @@ test("管理分页、网络失败重试、取消不提交与退出保护", async
   await expect(page.getByText("这次变更会被取消", { exact: true })).toHaveCount(
     0,
   );
+  await page.getByLabel("用户菜单", { exact: true }).click();
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.goto("/admin/audit");
@@ -237,7 +238,7 @@ test("手机注册错误、重复账号、普通员工资料与退出", async ({
   );
   await noOverflow(page);
   await page.screenshot({
-    path: "tmp/screenshots/s2c-mobile-register.png",
+    path: "tmp/screenshots/identity-mobile-register.png",
     fullPage: true,
   });
   await page
@@ -252,9 +253,10 @@ test("手机注册错误、重复账号、普通员工资料与退出", async ({
   await expect(page.getByRole("heading", { name: "基本资料" })).toBeVisible();
   await noOverflow(page);
   await page.screenshot({
-    path: "tmp/screenshots/s2c-mobile-account.png",
+    path: "tmp/screenshots/identity-mobile-account.png",
     fullPage: true,
   });
+  await page.getByLabel("用户菜单", { exact: true }).click();
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
 });
@@ -262,7 +264,7 @@ test("手机注册错误、重复账号、普通员工资料与退出", async ({
 test("手机管理员列表、授权表单和审计无页面溢出", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, "admin");
-  await page.getByRole("link", { name: "用户管理", exact: true }).click();
+  await page.getByRole("link", { name: "管理后台", exact: true }).click();
   await expect(page.getByRole("row")).toHaveCount(11);
   await noOverflow(page);
   await page
@@ -272,7 +274,7 @@ test("手机管理员列表、授权表单和审计无页面溢出", async ({ pa
   await expect(page.getByLabel("变更原因", { exact: true })).toBeVisible();
   await noOverflow(page);
   await page.screenshot({
-    path: "tmp/screenshots/s2c-mobile-admin.png",
+    path: "tmp/screenshots/identity-mobile-admin.png",
     fullPage: true,
   });
   await page.getByRole("button", { name: "取消", exact: true }).click();

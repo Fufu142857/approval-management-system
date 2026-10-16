@@ -35,13 +35,6 @@ export function UsersPanel({
   }
   return (
     <div className="stack large-gap">
-      <header className="page-heading">
-        <div>
-          <p className="eyebrow">组织管理</p>
-          <h1>用户管理</h1>
-          <p className="muted">核对部门、分配角色，维护成员的访问权限。</p>
-        </div>
-      </header>
       {success && <Notice>{success}</Notice>}
       {selected && (
         <AccessEditor

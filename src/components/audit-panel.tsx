@@ -42,9 +42,7 @@ export function AuditPanel({ departments }: { departments: Department[] }) {
     <div className="stack large-gap">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">管理记录</p>
-          <h1>操作审计</h1>
-          <p className="muted">追溯账号权限的每一次调整及其依据。</p>
+          <h2>授权变更记录</h2>
         </div>
         <button
           className="button secondary"

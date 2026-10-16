@@ -31,3 +31,19 @@ Design.pdf 第 19 页也明确该模块独立完成。
 
 遵守 docs/CONTRIBUTING.md。技术栈保持 Next.js 16 / React 19 / TypeScript / Tailwind CSS 4 / PostgreSQL；微信小程序独立使用 WXML / WXSS / TypeScript，并复用 HTTP API。
 权限在服务端执行，禁止客户端控制申请人/部门/角色/实际审批人。金额使用精确计算，业务状态、待办、审批日志及通知在同一事务内更新。
+
+## 界面外观约束
+
+用户要求 UI 外观与外层 Design.pdf 完全一致，不能自行另做视觉主题。修改界面前阅读 docs/UI_GUIDELINES.md，并渲染、查看原件中对应原型，完成后检查真实浏览器截图；只读 PDF 提取文本不足以确认外观。公共框架沿用黑白灰、四格标志、左侧导航、内容顶部标题和用户菜单、浅灰底与白色卡片。已有具体原型的页面按其结构、间距、字号、图标和控件逐项对照；没有独立原型的页面沿用公共规范并如实记录，不得宣称已逐像素一致。
+
+不复制或提交 PDF、原型提取图片与私密截图；迁移时由用户私下提供原件。原型中的示例业务和数字不代表已实现能力；未完成入口保持不可用，不用假数据填充工作台。设计参考不改变 S5 人工模块边界。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

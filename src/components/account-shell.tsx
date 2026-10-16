@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { UserIdentity } from "@/lib/identity";
 import { api, errorMessage, RequestError } from "@/lib/api-client";
 import { Notice } from "./ui";
+import { Icon, type IconName } from "./icons";
 
 export function RefreshAccount() {
   return (
@@ -56,63 +57,122 @@ export function AccountShell({
     }
   }
   const admin = user.status === "active" && user.roles.includes("system_admin");
-  const links = [
-    { href: "/account", label: "个人信息" },
-    ...(admin
-      ? [
-          { href: "/admin/users", label: "用户管理" },
-          { href: "/admin/audit", label: "操作审计" },
-        ]
-      : []),
+  const futureLinks: { label: string; icon: IconName }[] = [
+    { label: "工作台", icon: "home" },
+    { label: "我的申请", icon: "document" },
+    { label: "我的待办", icon: "task" },
+    { label: "通知中心", icon: "bell" },
   ];
+  const management = pathname.startsWith("/admin/");
+  const title =
+    pathname === "/admin/users"
+      ? "用户管理"
+      : pathname === "/admin/audit"
+        ? "操作审计"
+        : "个人信息";
+  const subtitle =
+    pathname === "/admin/users"
+      ? "维护用户的部门归属与角色权限"
+      : pathname === "/admin/audit"
+        ? "查看授权与配置变更记录"
+        : "查看个人资料、部门与角色权限";
   return (
     <>
       <a href="#main" className="skip-link">
         跳到主要内容
       </a>
-      <header className="topbar">
-        <Link href="/account" className="brand" prefetch={false}>
-          <span className="brand-mark" aria-hidden="true">
-            序
-          </span>
-          <span>
-            审批管理系统<small>组织与身份</small>
-          </span>
-        </Link>
-        <div className="user-menu">
-          <span>{user.fullName}</span>
-          <button
-            className="button secondary compact"
-            onClick={logout}
-            disabled={busy}
-          >
-            {busy ? "退出中…" : "退出登录"}
-          </button>
-        </div>
-      </header>
-      <div className="workspace">
+      <div className="app-frame">
         <aside className="sidebar">
-          <p className="eyebrow">工作空间</p>
+          <Link href="/account" className="brand" prefetch={false}>
+            <Icon name="grid" />
+            <span>审批管理系统</span>
+          </Link>
           <nav aria-label="主导航">
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                prefetch={false}
-                href={link.href}
-                aria-current={pathname === link.href ? "page" : undefined}
+            {futureLinks.map((link) => (
+              <span
+                key={link.label}
+                className="nav-item"
+                aria-disabled="true"
+                title={`${link.label}尚未开放`}
               >
+                <Icon name={link.icon} />
                 {link.label}
-                <span aria-hidden="true">↗</span>
-              </Link>
+              </span>
             ))}
+            {admin && (
+              <div className="nav-divider">
+                <Link
+                  className="nav-item"
+                  prefetch={false}
+                  href="/admin/users"
+                  aria-current={management ? "page" : undefined}
+                >
+                  <Icon name="settings" />
+                  管理后台
+                </Link>
+              </div>
+            )}
           </nav>
-          <p className="sidebar-note">
-            清晰的身份
-            <br />
-            有据可查的权限
-          </p>
         </aside>
+        <header className="topbar">
+          <div className="topbar-heading">
+            <h1>{title}</h1>
+            <p>{subtitle}</p>
+          </div>
+          <div className="topbar-tools">
+            <div className="search-placeholder" title="全局搜索尚未开放">
+              <Icon name="search" />
+              <input
+                aria-label="搜索申请、流程或人员"
+                placeholder="搜索申请、流程或人员..."
+                disabled
+              />
+            </div>
+            <details
+              className="user-menu"
+              key={pathname}
+              onKeyDown={(event) => {
+                if (event.key === "Escape")
+                  event.currentTarget.removeAttribute("open");
+              }}
+            >
+              <summary aria-label="用户菜单">
+                <span className="avatar">
+                  <Icon name="user" />
+                </span>
+                <span className="user-name">{user.fullName}</span>
+                <Icon name="chevron" />
+              </summary>
+              <div className="user-dropdown">
+                <Link href="/account" prefetch={false}>
+                  个人信息
+                </Link>
+                <button onClick={logout} disabled={busy}>
+                  {busy ? "退出中…" : "退出登录"}
+                </button>
+              </div>
+            </details>
+          </div>
+        </header>
         <main id="main" className="main-content">
+          {admin && management && (
+            <nav className="management-tabs" aria-label="管理后台导航">
+              <Link
+                href="/admin/users"
+                prefetch={false}
+                aria-current={pathname === "/admin/users" ? "page" : undefined}
+              >
+                用户管理
+              </Link>
+              <Link
+                href="/admin/audit"
+                prefetch={false}
+                aria-current={pathname === "/admin/audit" ? "page" : undefined}
+              >
+                操作审计
+              </Link>
+            </nav>
+          )}
           {error && <Notice error>{error}</Notice>}
           {children}
         </main>

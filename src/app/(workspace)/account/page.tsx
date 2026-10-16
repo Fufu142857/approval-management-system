@@ -17,9 +17,7 @@ export default async function AccountPage({
     <div className="stack large-gap">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">我的账号</p>
-          <h1>你好，{user.fullName}</h1>
-          <p className="muted">查看你的个人资料、部门归属与当前权限。</p>
+          <h2>{user.fullName}</h2>
         </div>
         <StatusBadge status={user.status} />
       </header>
