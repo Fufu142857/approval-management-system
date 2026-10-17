@@ -19,13 +19,16 @@
     "test": "vitest run",
     "test:http": "node scripts/smoke-identity.mjs",
     "test:e2e": "playwright test",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "attachments:gc": "tsx scripts/attachment-gc.ts"
   },
   "dependencies": {
     "next": "16.4.0",
+    "pdf-lib": "1.17.1",
     "pg": "8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "sharp": "0.35.5",
     "zod": "4.6.6"
   },
   "devDependencies": {

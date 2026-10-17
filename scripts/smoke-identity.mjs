@@ -1,8 +1,11 @@
+import { resolve } from "node:path";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { Pool } from "pg";
 import { loadEnvFile } from "node:process";
+import sharp from "sharp";
 loadEnvFile(".env");
+process.env.ATTACHMENT_STORAGE_DIR = resolve("tmp/attachments-http-test");
 assert(new URL(process.env.TEST_DATABASE_URL).pathname.endsWith("_test"));
 execFileSync(
   process.execPath,
@@ -313,7 +316,7 @@ try {
     (await call(detailPath, "GET", undefined, head.token)).response.status,
     200,
   );
-  // No notifications HTTP endpoint yet: inspect only the isolated test database.
+  // Check event-key persistence directly in the isolated test database as well.
   const persisted = new Pool({
     connectionString: process.env.TEST_DATABASE_URL,
   });
@@ -541,6 +544,111 @@ try {
       .body.data.unreadCount,
     3,
   );
+  // A separate draft keeps the earlier lifecycle/notification counts independent.
+  const attachmentDraft = await call("travel-drafts", "POST", travel, token);
+  assert.equal(attachmentDraft.response.status, 201);
+  const attachmentAppId = attachmentDraft.body.data.id;
+  const attachmentPath = `travel-applications/${attachmentAppId}/attachments`;
+  const png = await sharp({
+    create: { width: 3, height: 2, channels: 3, background: "white" },
+  })
+    .png()
+    .toBuffer();
+  async function uploadFile(version) {
+    const form = new FormData();
+    form.set("file", new File([png], "行程.png", { type: "image/png" }));
+    form.set("version", String(version));
+    const response = await fetch(`${origin}/api/${attachmentPath}`, {
+      method: "POST",
+      headers: { Origin: origin, Authorization: `Bearer ${token}` },
+      body: form,
+      signal: AbortSignal.timeout(10000),
+    });
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    return { response, body: await response.json() };
+  }
+  const uploaded = await uploadFile(1);
+  assert.equal(uploaded.response.status, 201);
+  assert.equal(uploaded.body.data.version, 2);
+  assert.equal(uploaded.body.data.attachment.originalName, "行程.png");
+  assert.equal(uploaded.body.data.attachment.storageKey, undefined);
+  const attachment = uploaded.body.data.attachment;
+  const contentPath = `${attachmentPath}/${attachment.id}/content`;
+  async function downloadFile(bearer, disposition = "attachment") {
+    return fetch(`${origin}/api/${contentPath}?disposition=${disposition}`, {
+      headers: { Authorization: `Bearer ${bearer}` },
+      signal: AbortSignal.timeout(10000),
+    });
+  }
+  const download = await downloadFile(token);
+  assert.equal(download.status, 200);
+  assert.equal(download.headers.get("cache-control"), "no-store");
+  assert.equal(download.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(download.headers.get("content-type"), "image/png");
+  assert.match(download.headers.get("content-disposition"), /^attachment;/);
+  assert.deepEqual(Buffer.from(await download.arrayBuffer()), png);
+  assert.equal((await downloadFile(finance.token)).status, 404);
+  assert.equal(
+    (await call(attachmentPath, "GET", undefined, undefined, cookie)).response
+      .status,
+    404,
+  );
+  assert.equal((await uploadFile(1)).response.status, 409);
+  const secondFile = await uploadFile(2);
+  assert.equal(secondFile.response.status, 201);
+  assert.equal(secondFile.body.data.version, 3);
+  const deletedFile = await call(
+    `${attachmentPath}/${secondFile.body.data.attachment.id}`,
+    "DELETE",
+    { version: 3 },
+    token,
+  );
+  assert.equal(deletedFile.response.status, 200);
+  assert.equal(deletedFile.body.data.version, 4);
+  const attachmentList = (await call(attachmentPath, "GET", undefined, token))
+    .body.data;
+  assert.deepEqual(attachmentList.items, [attachment]);
+  assert.equal(attachmentList.totalBytes, png.length);
+  assert.equal(attachmentList.version, 4);
+  const attachmentSubmission = await call(
+    `travel-drafts/${attachmentAppId}/submit`,
+    "POST",
+    { version: 4 },
+    token,
+  );
+  assert.equal(attachmentSubmission.response.status, 200);
+  assert.equal(attachmentSubmission.body.data.application.version, 5);
+  assert.equal((await uploadFile(5)).response.status, 409);
+  assert.equal(
+    (
+      await call(
+        `${attachmentPath}/${attachment.id}`,
+        "DELETE",
+        { version: 5 },
+        token,
+      )
+    ).response.status,
+    409,
+  );
+  const preview = await downloadFile(head.token, "inline");
+  assert.equal(preview.status, 200);
+  assert.match(preview.headers.get("content-disposition"), /^inline;/);
+  assert.match(preview.headers.get("content-security-policy"), /sandbox/);
+  assert.deepEqual(Buffer.from(await preview.arrayBuffer()), png);
+  assert.equal((await downloadFile(finance.token)).status, 404);
+  server.child.kill("SIGTERM");
+  await server.closed;
+  server = startServer();
+  await ready();
+  const persistedDownload = await downloadFile(head.token);
+  assert.equal(persistedDownload.status, 200);
+  assert.deepEqual(Buffer.from(await persistedDownload.arrayBuffer()), png);
+  const persistedAttachments = (
+    await call(attachmentPath, "GET", undefined, head.token)
+  ).body.data;
+  assert.deepEqual(persistedAttachments.items, [attachment]);
+  assert.equal(persistedAttachments.status, "pending");
+  assert.equal(persistedAttachments.version, 5);
   assert.equal(
     (await call("auth/logout", "POST", undefined, token)).response.status,
     200,
@@ -555,7 +663,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions, history authorization, notification inbox/detail/filter/count, owned idempotent read marking, stale task targets, terminal records and read timestamps survive production restart, logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; terminal records, metadata and attachment bytes survive production restart; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

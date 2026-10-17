@@ -9,6 +9,10 @@ import type {
 import { requireBusinessActor } from "./business-auth";
 import { transaction } from "./db";
 import { ApiError } from "./errors";
+import {
+  lockAttachmentStorage,
+  tryCollectAttachmentGarbage,
+} from "./attachment-storage";
 
 type DraftRow = Omit<TravelDraft, "createdAt" | "updatedAt"> & {
   createdAt: Date;
@@ -145,13 +149,17 @@ export async function deleteTravelDraft(
   id: string,
   version: number,
 ) {
-  return transaction(async (client) => {
+  const result = await transaction(async (client) => {
     const actor = await requireBusinessActor(token, client);
+    await lockAttachmentStorage(client);
     const draft = await ownedTravelDraft(client, id, actor.id, true);
     checkVersion(draft, version);
     // Explicit deletion is restricted to owned drafts; no cascade from users/departments.
+    await client.query("DELETE FROM attachments WHERE app_id=$1", [id]);
     await client.query("DELETE FROM travel_requests WHERE app_id=$1", [id]);
     await client.query("DELETE FROM applications WHERE id=$1", [id]);
     return { id, deleted: true };
   });
+  await tryCollectAttachmentGarbage();
+  return result;
 }

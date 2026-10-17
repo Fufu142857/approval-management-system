@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 import { defineConfig } from "@playwright/test";
@@ -32,6 +33,7 @@ export default defineConfig({
     gracefulShutdown: { signal: "SIGTERM", timeout: 2000 },
     env: {
       DATABASE_URL: databaseUrl,
+      ATTACHMENT_STORAGE_DIR: resolve("tmp/attachments-e2e-test"),
       APP_ORIGIN: "http://127.0.0.1:3101",
       SESSION_COOKIE_SECURE: "false",
     },

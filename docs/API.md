@@ -1,6 +1,6 @@
 # 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；尚无差旅页面、附件或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。所有成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；尚无差旅页面或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
@@ -171,6 +171,31 @@ NotificationItem 包含 `id, appId, kind, title, createdAt, readAt, target, task
 - 拥有通知只允许读该事件，不会自动获得正文权；target/task 为 null 时也可以标记该通知已读。既有 S3c 历史权限仍适用，未激活节点没有正文权，管理员权限不自动增加正文权。
 
 标记已读由数据库设置时间，不接受客户端时间。首次成功后重试和并发调用都返回相同首次 readAt，不重复生成事件、不影响审批/日志/申请状态；每次仍校验会话与通知所有权。未读数在之后的 GET 中查询。本轮不提供全部已读、删除、恢复未读、通知创建接口，也没有前台轮询/后台推送或页面跳转实现。
+
+## S3e 受控差旅附件
+
+以下 `:id` 为申请 UUID（草稿和已提交差旅共用），`:attachmentId` 为附件 UUID。均需有效 active 会话及有效确认部门。列表/下载沿用本人或已提交申请的已激活任务人员权限；未激活未来节点、他人、管理员无额外正文权限，统一返回 404。上传/删除仅限本人 draft，非草稿返回 409 NOT_DRAFT。提交后附件冻结，终态也不能修改。
+
+| 方法与路径                                                         | 输入                                                                   | 成功 data / 内容                                                             |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| POST /api/travel-applications/:id/attachments                      | multipart/form-data，只含一个 file 和一个十进制正整数 version 文本字段 | 201 `{ attachment: Attachment, version }`                                    |
+| GET /api/travel-applications/:id/attachments                       | 无查询参数                                                             | 200 `{ items: Attachment[], totalBytes, version, status }`，创建时间/ID 升序 |
+| DELETE /api/travel-applications/:id/attachments/:attachmentId      | JSON `{ version }`                                                     | 200 `{ id, deleted: true, version }`                                         |
+| GET /api/travel-applications/:id/attachments/:attachmentId/content | 可选 `disposition=attachment`（默认）或 `inline`，不收其他参数         | 200 原文件二进制；失败仍为统一 JSON 错误                                     |
+
+Attachment：`id, appId, uploaderId, originalName, mimeType, sizeBytes, sha256, createdAt`；其中 createdAt 为数据库 ISO 8601 时间，sizeBytes 为实际字节数，mimeType 为实际识别类型。存储键/物理路径不返回。列表最多 9 项，无分页。无附件时 items 为空、totalBytes 为 0；差旅附件是选填，空列表不阻止提交。
+
+- 容量明确按二进制口径：单件最多 10 MiB（10,485,760 字节），每申请最多 9 件、累计 50 MiB（52,428,800 字节），边界允许相等；空文件拒绝。整体 multipart 正文上限为单件上限 + 64 KiB，流式计数，不信任 Content-Length。
+- 原文件名 trim 后长度 1–180，禁止路径分隔符及 Unicode 控制/格式字符。仅 jpg/jpeg、png、pdf 扩展名，大小写不敏感；必须与真实签名和声明 MIME 一致。客户端未提供 MIME 或提供 application/octet-stream 时仍按内容与扩展名识别。file、version 以外字段及重复字段一律拒绝。
+- 图片使用 sharp 真实解码，最多 4000 万像素；PDF 使用 pdf-lib 校验可解析结构、尾标记和至少一页，拒绝加密/不可解析文件。保留原字节，不做病毒扫描、内容净化或格式转换。4000 万像素是服务端解析保护，不是新增课程功能。
+- 上传和删除附件成功都使**申请 version 加 1**。表单保存、提交、删除草稿必须使用最新版本；409 VERSION_CONFLICT 时重新读取草稿与附件列表，不盲目覆盖。上传前先验证身份与草稿权限，写事务再检查一次；客户端不可指定上传者、申请人、大小、摘要或存储位置。
+- 删除草稿同时事务删除附件元数据，再回收原文件；删除失败保留文件。提交前校验所有附件文件存在、大小和 SHA-256 匹配；缺失/损坏返回 409 ATTACHMENT_UNAVAILABLE，申请维持 draft。草稿用户可删去失效附件后重新上传；已提交附件只能由运维恢复对应原件，不能用不同内容替换。
+- 内容接口每次鉴权并校验文件摘要，返回实际 Content-Type、Content-Length、UTF-8 Content-Disposition（保留中文原名）、Cache-Control: no-store、X-Content-Type-Options: nosniff、CSP sandbox 与 Referrer-Policy: no-referrer。inline 仅提供浏览器预览响应；尚无前端预览 UI，不承诺每种浏览器的 PDF 插件表现。当前整件返回，不支持 Range 分片。
+- Cookie 上传/删除继续要求同源 Origin；Bearer 沿用既有来源规则。Web 构造 FormData 时不要手动写 Content-Type，让浏览器生成 boundary。小程序接入仍待 S6。
+
+新增错误：400 EMPTY_ATTACHMENT / INVALID_MULTIPART；413 ATTACHMENT_TOO_LARGE / ATTACHMENT_QUOTA_EXCEEDED / PAYLOAD_TOO_LARGE；415 UNSUPPORTED_ATTACHMENT / ATTACHMENT_TYPE_MISMATCH / INVALID_ATTACHMENT / UNSUPPORTED_MEDIA_TYPE；409 ATTACHMENT_UNAVAILABLE。文件名/UUID/版本校验沿用 400 VALIDATION_ERROR；存储或数据库内部错误返回 500 INTERNAL_ERROR，不泄露物理路径。私有目录、事务补偿与 `attachments:gc` 见 DATABASE.md。
+
+源码：`src/lib/attachments.ts` 定义类型/限制，`src/server/attachment-handlers.ts` 处理 HTTP，`src/server/travel-attachments.ts` 负责资源授权/事务，`attachment-validation.ts` 负责格式解析，`attachment-storage.ts` 负责私有文件与回收。真实服务签名见 HUMAN_HANDOFF.md；`tests/attachments.test.ts` 为本阶段验收，HTTP 脚本验证真实 multipart、下载与重启。解析参数依据 [sharp 构造器](https://sharp.pixelplumbing.com/api-constructor/) 和 [pdf-lib PDFDocument.load](https://pdf-lib.js.org/docs/api/classes/pdfdocument#load)。
 
 ## 错误和接入文件
 

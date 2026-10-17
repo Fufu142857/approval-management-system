@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import { completeTravelSchema, type TravelApplication } from "../lib/travel";
 import { requireBusinessActor } from "./business-auth";
 import { transaction } from "./db";
+import { verifyTravelAttachments } from "./attachment-storage";
 import { ApiError } from "./errors";
 import { ownedTravelDraft, travelColumns } from "./travel";
 
@@ -157,6 +158,7 @@ export async function submitTravelDraft(
       budget: draft.budget,
       remarks: draft.remarks,
     });
+    await verifyTravelAttachments(client, id);
     const steps = await fixedApprovers(client, actor.departmentId, actor.id);
     const department = (
       await client.query("SELECT name FROM departments WHERE id=$1", [

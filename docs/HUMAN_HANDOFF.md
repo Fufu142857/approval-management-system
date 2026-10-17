@@ -1,6 +1,6 @@
 # 人工模块交接边界
 
-**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3d 固定差旅审批与本人通知后端也已完成，下一步 S3e 受控差旅附件。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
+**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，下一步 S3f 差旅草稿 Web 页面。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
 
 ## 独立完成范围
 
@@ -36,7 +36,11 @@ S3c 已有 `POST /api/travel-applications/:id/tasks/:taskId/decision` 与 `POST 
 
 S3d 已有 GET /api/notifications、GET /api/notifications/:id、GET /api/notifications/unread-count、POST /api/notifications/:id/read。`src/server/notifications.ts` 导出 listNotifications(token, input)、getNotification(token, id)、unreadNotificationCount(token)、markNotificationRead(token, id)，token 为 string | undefined，id 为 UUID string，input 为 NotificationListInput；真实参数/返回与鉴权限制见 API.md。每个服务自行开事务，接收人由会话确定；直接调用前校验输入。005 仅新增未读索引，标记只更新 read_at，重复保留首次时间。
 
-通知事件本身的读取不授予正文权限，返回 target/task 为 null 时不可借通知访问正文；apiPath 指向现有鉴权 API，不是已实现的页面。状态与正文跳转后仍需重新读取验证。附件、待办/已办列表、复制重提接口与通知 UI/轮询仍**未实现**，现有能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
+通知事件本身的读取不授予正文权限，返回 target/task 为 null 时不可借通知访问正文；apiPath 指向现有鉴权 API，不是已实现的页面。状态与正文跳转后仍需重新读取验证。待办/已办列表、复制重提接口与业务/附件/通知 UI、轮询仍**未实现**，现有能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+S3e 已有固定差旅附件 API，完整路径/返回见 API.md。`src/server/travel-attachments.ts` 导出 `uploadTravelAttachment(token, id, version, bytes: Buffer, filename, declaredType)`、`listTravelAttachments(token, id)`、`deleteTravelAttachment(token, id, attachmentId, version)`、`getTravelAttachmentContent(token, id, attachmentId)`；token 为 string | undefined，ID/filename/declaredType 为 string，version 为 number，各自开事务。直接调用前校验 UUID/version；HTTP 上传在读正文前还会调用 authorizeAttachmentUpload，实际写入再次鉴权。类型/常量在 `src/lib/attachments.ts`，格式解析在 attachment-validation.ts，私有存储/完整性检查/回收在 attachment-storage.ts。
+
+006 附件表记录所有权关联及校验摘要，存储键不向 HTTP 暴露；上传和删除递增申请 version，提交后冻结。锁顺序为组织 → 存储 72004 共享锁 → 申请；回收独占 72004 并检查数据库引用，避免与上传争抢文件。提交与下载校验原文件，缺失/损坏返回 409。数据库与附件必须配对迁移，具体补偿和恢复边界见 DATABASE.md。这些服务当前仅授权固定差旅，不含动态附件字段或自定义业务接入实现。
 
 ## 到达 S5 前必须填写的交接资料
 
