@@ -503,7 +503,7 @@ test("历史不可改删；首待办和通知唯一约束阻止重复记录，�
   }
   await expect(
     database().query(
-      "UPDATE approval_tasks SET status='pending' WHERE instance_id=$1 AND seq_no=2",
+      "UPDATE approval_tasks SET status='pending',activated_at=clock_timestamp() WHERE instance_id=$1 AND seq_no=2",
       [result.workflow.id],
     ),
   ).rejects.toMatchObject({ code: "23505" });

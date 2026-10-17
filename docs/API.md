@@ -1,6 +1,6 @@
 # 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。尚无差旅页面、通过/驳回/撤回操作、附件、通知查询或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。所有成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；尚无差旅页面、附件、通知查询或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。所有成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
@@ -96,12 +96,12 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 
 ## S3b 固定差旅提交与详情
 
-| 方法与路径                         | 权限与请求                                | 成功响应                                      |
-| ---------------------------------- | ----------------------------------------- | --------------------------------------------- |
-| POST /api/travel-drafts/:id/submit | 本人草稿；JSON 只允许 `{ "version": 1 }`  | 200，`{ application, workflow, tasks, logs }` |
-| GET /api/travel-applications/:id   | 本人或该申请当前 pending 任务的实际审批人 | 200，同上                                     |
+| 方法与路径                         | 权限与请求                               | 成功响应                                      |
+| ---------------------------------- | ---------------------------------------- | --------------------------------------------- |
+| POST /api/travel-drafts/:id/submit | 本人草稿；JSON 只允许 `{ "version": 1 }` | 200，`{ application, workflow, tasks, logs }` |
+| GET /api/travel-applications/:id   | 本人或该申请已激活任务的实际审批人       | 200，同上                                     |
 
-两者都要求有效会话、active 账号和有效确认部门。管理员无正文特权，后续 blocked 节点审批人暂不能访问；不属于授权范围、没有提交或不存在均返回 404。角色调整不会改写旧实例或重新挑选审批人；旧实际审批人仍 active 且部门有效时，重新登录后可访问其当前任务，即使已移除该角色。停用账号不能访问；自动转派未实现。
+两者都要求有效会话、active 账号和有效确认部门。管理员无正文特权，后续 blocked 节点审批人暂不能访问；不属于授权范围、没有提交或不存在均返回 404。角色调整不会改写旧实例或重新挑选审批人；旧实际审批人仍 active 且部门有效时，重新登录后可访问其已激活任务对应申请，即使任务已完成/失效或已移除该角色。未激活即被取消的后续任务不授予正文权限。停用账号不能访问；自动转派未实现。
 
 提交先取得组织共享锁和申请行锁，检查 owner/draft/version，再从数据库读取完整字段重新校验。title、departure、destination、purpose、transportation 必须非空，startDate/endDate/budget 必填；companions/remarks 可为空。日期、长度和金额范围沿用草稿约束，零预算有效，不引入金额阈值。保存成功不等于满足提交条件，缺字段返回 400 VALIDATION_ERROR 和 fieldErrors。
 
@@ -113,18 +113,48 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 
 返回结构：
 
-- application：草稿的固定字段及身份/编号/时间，status 当前为 pending、submittedAt 非空、version 为提交后的版本；金额仍为字符串、日期仍为 YYYY-MM-DD。
+- application：草稿的固定字段及身份/编号/时间，status 提交时为 pending，后续可为 approved/rejected/withdrawn；submittedAt 非空、version 随状态流转增加；金额仍为字符串、日期仍为 YYYY-MM-DD。
 - workflow：id、ruleVersion、submittedVersion、routeSnapshot、createdAt。routeSnapshot 包含 ruleVersion、policy、applicant（id/name/departmentId/departmentName）、budget、durationDays、steps；每步含 seqNo/name/rule/approver（同上四个人员字段）。仅保留固定执行快照，无模板编辑或解释 API。
-- tasks：按 seqNo 升序，id/seqNo/name/approverId/status/createdAt。
+- tasks：按 seqNo 升序，id/seqNo/name/approverId/status/createdAt/activatedAt/finishedAt；后两项未发生时为 null。
 - logs：按 createdAt/id 升序，id/taskId/actorId/action/opinion/result/applicationVersion/createdAt；提交记录 taskId=null、action=submitted、opinion=""、result=pending。
 
-所有 HTTP 时间点为 ISO 8601。通知按 recipient_id/event_key 唯一，事件键为 `task:<任务UUID>:pending`。**目前只持久化通知，没有列表、未读数、已读、轮询或跳转界面**；待办列表和审批动作也尚未提供，不把数据库枚举当作功能已完成。
+所有 HTTP 时间点为 ISO 8601。通知按 recipient_id/event_key 唯一，事件键为 `task:<任务UUID>:pending`。**目前只持久化通知，没有列表、未读数、已读、轮询或跳转界面**；待办列表仍未提供，审批动作见下节，不把数据库枚举当作功能已完成。
+
+## S3c 固定差旅审批与撤回
+
+| 方法与路径                                               | 请求                                                         | 权限与结果                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------- |
+| POST /api/travel-applications/:id/tasks/:taskId/decision | `{ "version": 2, "decision": "approve", "opinion": "同意" }` | 该申请当前 pending 任务的实际审批人；200 返回完整详情 |
+| POST /api/travel-applications/:id/withdraw               | `{ "version": 2, "opinion": "行程取消" }`                    | 本人且申请 pending；200 返回完整详情                  |
+
+两个路径 ID 均为 UUID。正文严格白名单，version 是当前申请版本，不是任务序号。decision 仅 approve/reject；opinion 去两端空白后最多 2000 字符，通过和撤回可省略/为空，驳回必须非空。Cookie 写请求仍需同源 Origin；服务端执行 active、有效部门、会话检查，禁用/撤销会话不能操作。
+
+处理规则：
+
+- 通过关闭当前任务；有下一节点时仅激活该节点、申请仍 pending；最后一步通过才置 approved。每次成功 version 加 1，日志记录实际任务、操作者、意见、新版本及本次结果，提交时间和原快照不变。
+- 驳回将当前任务置 rejected、未完成后续任务置 cancelled，申请进入 rejected 终态；保留已办任务和历史。
+- 本人可在任一 pending 阶段撤回；所有 pending/blocked 任务置 cancelled，已完成任务保留。日志关联撤回时的当前任务；申请进入 withdrawn 终态，不返回草稿。
+- 任务归属来自提交快照，管理员无审批特权。申请人自审返回 403 SELF_APPROVAL；不属于自己的任务、任务与申请不匹配、非本人撤回返回 404。已完成/未激活任务不能操作，返回 409 TASK_NOT_PENDING；terminal 返回 409 STATE_CHANGED；旧版本返回 409 VERSION_CONFLICT。先检查归属，再检查状态/版本，不向无关用户泄露状态。
+- 若下一快照审批人停用或部门无效，当前通过返回 409 APPROVER_UNAVAILABLE 并完整回滚。恢复原人员账号后可继续；不因角色移除而换人，不自动转派或跳过。驳回/撤回不依赖下一人员可用。
+- 同一非申请人负责两步时仍须处理两个不同任务。即使用最新申请版本重放旧 taskId，也不能处理下一节点。超时/409 后读取详情，由使用者确认是否发起新的动作，不自动换版本重试。
+
+所有写入遵循组织共享锁 → 会话/部门 → 申请排他行锁，再检查版本/当前节点。审批与撤回使用同一申请锁，相同版本并发只有一个成功；后到请求不会追加日志或通知。任务、申请、日志、通知任一写入失败全部回滚。详情先获得申请共享行锁，等待写事务完成后再查询权限和完整详情，防止返回新旧混合的任务/日志。
+
+通知接收规则与事件键：
+
+| 事件          | 接收人                                   | event_key                                            |
+| ------------- | ---------------------------------------- | ---------------------------------------------------- |
+| 下一待办      | 下一实际审批人                           | `task:<任务UUID>:pending`                            |
+| 全部通过/驳回 | 申请人                                   | `application:<申请UUID>:<新版本>:approved或rejected` |
+| 撤回          | 申请人及曾激活任务的实际审批人，按人去重 | `application:<申请UUID>:<新版本>:withdrawn`          |
+
+旧待办通知作为历史保留，是否还能操作以当前任务状态为准；不会因通知存在放宽权限。未激活即取消的未来人员不接收撤回通知，也不能读取正文。当前只有持久化事件，通知读取/未读数/已读与业务 UI 留待后续。
 
 ## 错误和接入文件
 
 400：VALIDATION_ERROR / INVALID_JSON / INVALID_DEPARTMENT；401：UNAUTHENTICATED / INVALID_CREDENTIALS；403：FORBIDDEN / INVALID_ORIGIN；404：NOT_FOUND；409：ALREADY_EXISTS / SELF_ACCESS_CHANGE；413：PAYLOAD_TOO_LARGE；415：UNSUPPORTED_MEDIA_TYPE；429：RATE_LIMITED；500：INTERNAL_ERROR。登录错误不区分用户不存在、密码错误和已禁用。500 不回传 SQL 或异常堆栈。
 
-差旅新增：403 ACCOUNT_NOT_ACTIVE / DEPARTMENT_INACTIVE；409 NOT_DRAFT / VERSION_CONFLICT / VERSION_LIMIT / APPROVER_UNRESOLVED / SELF_APPROVAL。金额、日期、版本与白名单错误均沿用 400 VALIDATION_ERROR。已存在但不属于访问范围的申请与不存在的 ID 均为 404 NOT_FOUND。
+差旅新增：403 ACCOUNT_NOT_ACTIVE / DEPARTMENT_INACTIVE；409 NOT_DRAFT / VERSION_CONFLICT / VERSION_LIMIT / APPROVER_UNRESOLVED / SELF_APPROVAL。S3c 另有 403 SELF_APPROVAL、409 STATE_CHANGED / TASK_NOT_PENDING / APPROVER_UNAVAILABLE。金额、日期、版本与白名单错误均沿用 400 VALIDATION_ERROR。已存在但不属于访问范围的申请与不存在的 ID 均为 404 NOT_FOUND。
 
 - `src/lib/identity.ts`：输入 schema、角色代码、UserIdentity 类型，可供 S2c 页面共享。
 - `src/server/identity-handlers.ts`：HTTP 适配；`src/app/api/**/route.ts` 只导出对应处理器。
@@ -141,5 +171,10 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 - `src/server/travel-submission.ts`：`submitTravelDraft(token: string | undefined, id: string, version: number)`、`getTravelApplication(token: string | undefined, id: string)`；各自负责事务，直接调用前必须校验 UUID 与 version，提交时服务端仍校验已存表单。
 - `src/server/travel-submission-handlers.ts`：HTTP 来源/正文/参数验证和统一响应；两个新路由仅导出处理器。
 - `tests/travel-submission.test.ts`：15 项提交、快照、权限、竞争、回滚、不可变与去重约束测试；HTTP 脚本另验证生产路由、重复提交拒绝、详情授权，以及实际重启后申请/快照/任务/日志/通知保留。
+
+- `src/lib/travel-actions.ts`：travelDecisionSchema / travelWithdrawalSchema，及 TravelDecisionInput / TravelWithdrawalInput。
+- `src/server/travel-actions.ts`：`decideTravelTask(token: string | undefined, id: string, taskId: string, input: TravelDecisionInput)`、`withdrawTravelApplication(token: string | undefined, id: string, input: TravelWithdrawalInput)`；均自行开事务，直接调用服务前须按对应 schema 和 UUID 校验参数。
+- `src/server/travel-action-handlers.ts`：新增两个 HTTP 处理器；`submittedDetail(client, id, actorId)` 在现有事务及业务身份检查后使用，负责申请共享锁、资源权限和一致详情，不负责开启事务或验证会话，不能单独暴露为绕过认证的入口。
+- `tests/travel-actions.test.ts`：14 项新增验收，覆盖正常/终态、授权、固定快照、竞争、故障回滚和详情一致性；生产 HTTP 脚本覆盖三种终态及实际进程重启保留。
 
 实现参考：[OWASP 会话管理](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)、[node-postgres 事务](https://node-postgres.com/features/transactions)、[Zod 输入校验](https://zod.dev/api)。

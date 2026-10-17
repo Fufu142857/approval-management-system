@@ -65,12 +65,18 @@ async function fixedApprovers(
   ];
 }
 
-async function submittedDetail(
+export async function submittedDetail(
   client: PoolClient,
   id: string,
   actorId: string,
 ) {
-  // Future blocked approvers have no access yet. A management role grants no business access.
+  // Lock first, then authorize in a fresh statement after any waiting writer commits.
+  // All state writers hold this same application lock until their transaction completes.
+  await client.query(
+    "SELECT id FROM applications WHERE id=$1 AND type='travel' FOR SHARE",
+    [id],
+  );
+  // Only activated assignees retain history access; future cancelled tasks grant none.
   const result = await client.query<
     Omit<TravelApplication, "createdAt" | "updatedAt" | "submittedAt"> & {
       createdAt: Date;
@@ -82,7 +88,7 @@ async function submittedDetail(
      WHERE a.id=$1 AND a.type='travel' AND a.status<>'draft'
        AND (a.applicant_id=$2 OR EXISTS (
          SELECT 1 FROM approval_instances i JOIN approval_tasks task ON task.instance_id=i.id
-         WHERE i.app_id=a.id AND task.approver_id=$2 AND task.status='pending'))`,
+         WHERE i.app_id=a.id AND task.approver_id=$2 AND task.activated_at IS NOT NULL))`,
     [id, actorId],
   );
   if (!result.rowCount)
@@ -98,7 +104,8 @@ async function submittedDetail(
   if (!workflow) throw new ApiError(404, "NOT_FOUND", "审批实例不存在");
   const tasks = (
     await client.query(
-      `SELECT id,seq_no AS "seqNo",step_name AS name,approver_id AS "approverId",status,created_at AS "createdAt"
+      `SELECT id,seq_no AS "seqNo",step_name AS name,approver_id AS "approverId",status,created_at AS "createdAt",
+       activated_at AS "activatedAt",finished_at AS "finishedAt"
      FROM approval_tasks WHERE instance_id=$1 ORDER BY seq_no`,
       [workflow.id],
     )
@@ -186,8 +193,8 @@ export async function submitTravelDraft(
     for (const step of steps) {
       const task = (
         await client.query<{ id: string }>(
-          `INSERT INTO approval_tasks(instance_id,seq_no,step_name,approver_id,status)
-         VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+          `INSERT INTO approval_tasks(instance_id,seq_no,step_name,approver_id,status,activated_at)
+         VALUES ($1,$2,$3,$4,$5::varchar,CASE WHEN $5::varchar='pending' THEN clock_timestamp() ELSE NULL END) RETURNING id`,
           [
             instance.id,
             step.seqNo,

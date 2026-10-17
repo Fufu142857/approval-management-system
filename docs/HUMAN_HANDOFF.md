@@ -1,6 +1,6 @@
 # 人工模块交接边界
 
-**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a 草稿和 S3b 固定差旅提交/详情后端也已完成，下一步 S3c 固定审批动作与撤回。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
+**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3c 固定差旅草稿、提交/详情及审批/撤回后端也已完成，下一步 S3d 本人通知查询与已读。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
 
 ## 独立完成范围
 
@@ -30,7 +30,11 @@ S3b 已有 `POST /api/travel-drafts/:id/submit`（只收 version）和 `GET /api
 
 003 新增固定执行所需 approval_instances/tasks/logs/notifications，实例与日志不可更新/删除，首个任务 pending、下一步 blocked。通知按接收人和事件键去重。当前用固定版本标识与不可变 JSON 快照，不含模板配置/发布/版本表或动态字段；完整模型及真实可复用边界到 S4 再冻结。
 
-附件、通过/驳回/撤回、待办/已办列表和通知读取接口仍**未实现**；通知只有首条待办事件持久化，现有能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
+S3c 已有 `POST /api/travel-applications/:id/tasks/:taskId/decision` 与 `POST /api/travel-applications/:id/withdraw`，参数/错误/通知接收人详见 API.md。服务 `src/server/travel-actions.ts` 导出 `decideTravelTask(token, id, taskId, input: TravelDecisionInput)` 与 `withdrawTravelApplication(token, id, input: TravelWithdrawalInput)`，token 为 string | undefined，其余 ID 为 string；直接服务调用必须先通过 `src/lib/travel-actions.ts` 的 schema 与 UUID 校验。两者自行开事务，返回完整详情。
+
+004 为任务增加激活/完成时间，日志增加版本/任务决策唯一约束。审批/撤回锁申请并核版本，单事务写状态/任务/日志/通知；下一人员不可用时不自动换人。`submittedDetail(client, id, actorId)` 仅用于已做业务身份检查的事务，先锁申请再授权和查询，不能绕过认证单独暴露。已激活任务人员可查历史；未激活取消节点无正文权限。
+
+附件、待办/已办列表、复制重提与通知读取接口仍**未实现**；通知覆盖新待办/通过/驳回/撤回但只有持久化，现有能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 到达 S5 前必须填写的交接资料
 

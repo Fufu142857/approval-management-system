@@ -331,6 +331,138 @@ try {
   } finally {
     await persisted.end();
   }
+  const decisionPath = (value, index) =>
+    `travel-applications/${value.application.id}/tasks/${value.tasks[index].id}/decision`;
+  assert.equal(
+    (
+      await call(
+        decisionPath(detail, 1),
+        "POST",
+        { version: 2, decision: "approve" },
+        finance.token,
+      )
+    ).response.status,
+    409,
+  );
+  const firstDecision = await call(
+    decisionPath(detail, 0),
+    "POST",
+    { version: 2, decision: "approve", opinion: "同意" },
+    head.token,
+  );
+  assert.equal(firstDecision.response.status, 200);
+  assert.equal(firstDecision.body.data.application.version, 3);
+  assert.equal(
+    (await call(detailPath, "GET", undefined, head.token)).response.status,
+    200,
+  );
+  const finalDecision = await call(
+    decisionPath(detail, 1),
+    "POST",
+    { version: 3, decision: "approve" },
+    finance.token,
+  );
+  assert.equal(finalDecision.response.status, 200);
+  assert.equal(finalDecision.body.data.application.status, "approved");
+  assert.equal(finalDecision.body.data.logs.length, 3);
+  assert.equal(
+    (
+      await call(
+        decisionPath(detail, 1),
+        "POST",
+        { version: 3, decision: "approve" },
+        finance.token,
+      )
+    ).response.status,
+    409,
+  );
+  async function submittedTravel() {
+    const saved = await call("travel-drafts", "POST", travel, token);
+    assert.equal(saved.response.status, 201);
+    const result = await call(
+      `travel-drafts/${saved.body.data.id}/submit`,
+      "POST",
+      { version: 1 },
+      token,
+    );
+    assert.equal(result.response.status, 200);
+    return result.body.data;
+  }
+  const rejectedTravel = await submittedTravel();
+  assert.equal(
+    (
+      await call(
+        decisionPath(rejectedTravel, 0),
+        "POST",
+        { version: 2, decision: "reject", opinion: " " },
+        head.token,
+      )
+    ).response.status,
+    400,
+  );
+  const rejection = await call(
+    decisionPath(rejectedTravel, 0),
+    "POST",
+    { version: 2, decision: "reject", opinion: "请补充行程" },
+    head.token,
+  );
+  assert.equal(rejection.response.status, 200);
+  assert.equal(rejection.body.data.application.status, "rejected");
+  const withdrawnTravel = await submittedTravel();
+  const withdrawalPath = `travel-applications/${withdrawnTravel.application.id}/withdraw`;
+  const withdrawal = await call(
+    withdrawalPath,
+    "POST",
+    { version: 2, opinion: "行程取消" },
+    token,
+  );
+  assert.equal(withdrawal.response.status, 200);
+  assert.equal(withdrawal.body.data.application.status, "withdrawn");
+  assert.equal(
+    (await call(withdrawalPath, "POST", { version: 2 }, token)).response.status,
+    409,
+  );
+  assert.equal(
+    (
+      await call(
+        `travel-applications/${withdrawnTravel.application.id}`,
+        "GET",
+        undefined,
+        finance.token,
+      )
+    ).response.status,
+    404,
+  );
+  server.child.kill("SIGTERM");
+  await server.closed;
+  server = startServer();
+  await ready();
+  for (const result of [finalDecision, rejection, withdrawal]) {
+    const resultPath = `travel-applications/${result.body.data.application.id}`;
+    assert.deepEqual(
+      (await call(resultPath, "GET", undefined, token)).body.data,
+      result.body.data,
+    );
+    assert.equal(
+      (await call(resultPath, "GET", undefined, head.token)).response.status,
+      200,
+    );
+  }
+  const terminalRecords = new Pool({
+    connectionString: process.env.TEST_DATABASE_URL,
+  });
+  try {
+    const counts = await terminalRecords.query(
+      "SELECT kind,count(*)::int AS count FROM notifications WHERE kind<>'approval.pending' GROUP BY kind ORDER BY kind",
+    );
+    assert.deepEqual(counts.rows, [
+      { kind: "application.approved", count: 1 },
+      { kind: "application.rejected", count: 1 },
+      { kind: "application.withdrawn", count: 2 },
+    ]);
+  } finally {
+    await terminalRecords.end();
+  }
   assert.equal(
     (await call("auth/logout", "POST", undefined, token)).response.status,
     200,
@@ -345,7 +477,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, draft CRUD/conflicts/ownership, fixed travel submission/snapshots/tasks/log/notice, detail authorization, duplicate submission, production restart persistence, logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission, sequential approval/rejection/withdrawal, task and history authorization, duplicate/conflict rejection, all terminal records and notifications survive production restart, logout.",
   );
 } finally {
   server.child.kill("SIGTERM");
