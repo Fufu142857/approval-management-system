@@ -1,6 +1,6 @@
 # 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；尚无差旅页面、附件、通知查询或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。所有成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；尚无差旅页面、附件或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。所有成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
@@ -118,7 +118,7 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 - tasks：按 seqNo 升序，id/seqNo/name/approverId/status/createdAt/activatedAt/finishedAt；后两项未发生时为 null。
 - logs：按 createdAt/id 升序，id/taskId/actorId/action/opinion/result/applicationVersion/createdAt；提交记录 taskId=null、action=submitted、opinion=""、result=pending。
 
-所有 HTTP 时间点为 ISO 8601。通知按 recipient_id/event_key 唯一，事件键为 `task:<任务UUID>:pending`。**目前只持久化通知，没有列表、未读数、已读、轮询或跳转界面**；待办列表仍未提供，审批动作见下节，不把数据库枚举当作功能已完成。
+所有 HTTP 时间点为 ISO 8601。通知按 recipient_id/event_key 唯一，事件键为 `task:<任务UUID>:pending`。**S3d 已提供通知列表/详情/未读数/已读 API，轮询和跳转界面尚未实现**；待办列表仍未提供，审批动作见下节，不把数据库枚举当作功能已完成。
 
 ## S3c 固定差旅审批与撤回
 
@@ -148,7 +148,29 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 | 全部通过/驳回 | 申请人                                   | `application:<申请UUID>:<新版本>:approved或rejected` |
 | 撤回          | 申请人及曾激活任务的实际审批人，按人去重 | `application:<申请UUID>:<新版本>:withdrawn`          |
 
-旧待办通知作为历史保留，是否还能操作以当前任务状态为准；不会因通知存在放宽权限。未激活即取消的未来人员不接收撤回通知，也不能读取正文。当前只有持久化事件，通知读取/未读数/已读与业务 UI 留待后续。
+旧待办通知作为历史保留，是否还能操作以当前任务状态为准；不会因通知存在放宽权限。未激活即取消的未来人员不接收撤回通知，也不能读取正文。通知读取/未读数/已读接口见 S3d；业务 UI 和前台轮询留待后续。
+
+## S3d 本人站内通知
+
+| 方法与路径                          | 请求                                   | 成功响应 data                                   |
+| ----------------------------------- | -------------------------------------- | ----------------------------------------------- |
+| GET /api/notifications              | page/pageSize/state?                   | `{ items, total, unreadCount, page, pageSize }` |
+| GET /api/notifications/:id          | UUID，不接受查询参数                   | NotificationItem                                |
+| GET /api/notifications/unread-count | 不接受查询参数                         | `{ unreadCount }`                               |
+| POST /api/notifications/:id/read    | UUID，JSON 必须为 `{}`，不接受查询参数 | `{ id, readAt }`                                |
+
+以上均需有效会话、active 账号与有效确认部门，且只操作会话用户收到的通知，不接受 recipientId/userId。管理员无查看或标记他人通知的特权；他人的通知与不存在的 ID 均返回 404 NOT_FOUND。列表查询、读取详情都不会自动标记已读；标记必须显式发 POST，Cookie 写请求需同源 Origin。无效 ID/参数/正文返回 400，未确认返回 403，失效会话返回 401。
+
+分页默认 page=1/pageSize=20，上限分别 100000/100；state 仅 all/unread/read，默认 all。按 createdAt DESC、id DESC 稳定排序；超出末页返回空 items 与真实 total。total 是当前 state 筛选后的总数，unreadCount 始终是本人全部未读数，不受分页和 state 影响。列表的内容/总数/未读数/关联当前状态在同一 SQL 快照中产生；独立未读数接口是另一个时点，状态变化后与此前列表有差异属正常情况。跨页请求期间有新事件时，偏移分页可能位移，客户端刷新第一页即可。
+
+NotificationItem 包含 `id, appId, kind, title, createdAt, readAt, target, task`。kind 为 approval.pending/application.approved/application.rejected/application.withdrawn；title 保留事件生成时标题，createdAt/readAt 为 ISO 8601（未读 readAt=null），不返回接收人资料或内部事件键。
+
+- target：当前有正文访问权时为 `{ type: "travel", id, status, apiPath: "/api/travel-applications/<UUID>" }`；无权访问或无支持的已提交业务时为 null。apiPath 是已存在的鉴权 API，不是尚未实现的页面地址。真正读取正文仍由该 API 重新鉴权。
+- task：仅原 approval.pending 通知能匹配到本人的原任务且有正文权限时，返回 `{ id, status }`，否则 null。它始终描述这条通知原本对应的任务，不自动替换为下一任务。
+- 通知 kind/title 是历史事件；target.status 和 task.status 是本次查询的当前状态。撤回后旧待办通知仍存在，可能同时返回 withdrawn/cancelled；已办任务返回 approved/rejected，不能凭通知标题继续审批。客户端将来进入详情后必须刷新最新版本和任务，再决定可用操作。
+- 拥有通知只允许读该事件，不会自动获得正文权；target/task 为 null 时也可以标记该通知已读。既有 S3c 历史权限仍适用，未激活节点没有正文权，管理员权限不自动增加正文权。
+
+标记已读由数据库设置时间，不接受客户端时间。首次成功后重试和并发调用都返回相同首次 readAt，不重复生成事件、不影响审批/日志/申请状态；每次仍校验会话与通知所有权。未读数在之后的 GET 中查询。本轮不提供全部已读、删除、恢复未读、通知创建接口，也没有前台轮询/后台推送或页面跳转实现。
 
 ## 错误和接入文件
 
@@ -176,5 +198,9 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 - `src/server/travel-actions.ts`：`decideTravelTask(token: string | undefined, id: string, taskId: string, input: TravelDecisionInput)`、`withdrawTravelApplication(token: string | undefined, id: string, input: TravelWithdrawalInput)`；均自行开事务，直接调用服务前须按对应 schema 和 UUID 校验参数。
 - `src/server/travel-action-handlers.ts`：新增两个 HTTP 处理器；`submittedDetail(client, id, actorId)` 在现有事务及业务身份检查后使用，负责申请共享锁、资源权限和一致详情，不负责开启事务或验证会话，不能单独暴露为绕过认证的入口。
 - `tests/travel-actions.test.ts`：14 项新增验收，覆盖正常/终态、授权、固定快照、竞争、故障回滚和详情一致性；生产 HTTP 脚本覆盖三种终态及实际进程重启保留。
+
+- `src/lib/notifications.ts`：notificationListSchema、emptyNotificationSchema、NotificationListInput / NotificationItem。
+- `src/server/notifications.ts`：`listNotifications(token: string | undefined, input: NotificationListInput)`、`getNotification(token: string | undefined, id: string)`、`unreadNotificationCount(token: string | undefined)`、`markNotificationRead(token: string | undefined, id: string)`，各自事务内身份检查；直接调用前校验 UUID/输入 schema。
+- `src/server/notification-handlers.ts`：四个 HTTP 处理器；`tests/notifications.test.ts` 包含 12 项通知验收，HTTP 脚本验证生产路径及阅读时间重启保留。
 
 实现参考：[OWASP 会话管理](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)、[node-postgres 事务](https://node-postgres.com/features/transactions)、[Zod 输入校验](https://zod.dev/api)。

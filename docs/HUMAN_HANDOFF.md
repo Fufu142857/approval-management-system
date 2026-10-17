@@ -1,6 +1,6 @@
 # 人工模块交接边界
 
-**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3c 固定差旅草稿、提交/详情及审批/撤回后端也已完成，下一步 S3d 本人通知查询与已读。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
+**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3d 固定差旅审批与本人通知后端也已完成，下一步 S3e 受控差旅附件。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
 
 ## 独立完成范围
 
@@ -34,7 +34,9 @@ S3c 已有 `POST /api/travel-applications/:id/tasks/:taskId/decision` 与 `POST 
 
 004 为任务增加激活/完成时间，日志增加版本/任务决策唯一约束。审批/撤回锁申请并核版本，单事务写状态/任务/日志/通知；下一人员不可用时不自动换人。`submittedDetail(client, id, actorId)` 仅用于已做业务身份检查的事务，先锁申请再授权和查询，不能绕过认证单独暴露。已激活任务人员可查历史；未激活取消节点无正文权限。
 
-附件、待办/已办列表、复制重提与通知读取接口仍**未实现**；通知覆盖新待办/通过/驳回/撤回但只有持久化，现有能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
+S3d 已有 GET /api/notifications、GET /api/notifications/:id、GET /api/notifications/unread-count、POST /api/notifications/:id/read。`src/server/notifications.ts` 导出 listNotifications(token, input)、getNotification(token, id)、unreadNotificationCount(token)、markNotificationRead(token, id)，token 为 string | undefined，id 为 UUID string，input 为 NotificationListInput；真实参数/返回与鉴权限制见 API.md。每个服务自行开事务，接收人由会话确定；直接调用前校验输入。005 仅新增未读索引，标记只更新 read_at，重复保留首次时间。
+
+通知事件本身的读取不授予正文权限，返回 target/task 为 null 时不可借通知访问正文；apiPath 指向现有鉴权 API，不是已实现的页面。状态与正文跳转后仍需重新读取验证。附件、待办/已办列表、复制重提接口与通知 UI/轮询仍**未实现**，现有能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 到达 S5 前必须填写的交接资料
 

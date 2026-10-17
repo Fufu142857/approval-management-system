@@ -463,6 +463,84 @@ try {
   } finally {
     await terminalRecords.end();
   }
+  const inbox = await call("notifications", "GET", undefined, head.token);
+  assert.equal(inbox.response.status, 200);
+  assert.equal(inbox.body.data.total, 4);
+  assert.equal(inbox.body.data.unreadCount, 4);
+  const oldTaskNotice = inbox.body.data.items.find(
+    (item) => item.appId === detail.application.id,
+  );
+  assert(oldTaskNotice);
+  assert.equal(oldTaskNotice.task.status, "approved");
+  assert.equal(oldTaskNotice.target.status, "approved");
+  assert.equal(
+    (
+      await call(
+        oldTaskNotice.target.apiPath.slice(5),
+        "GET",
+        undefined,
+        head.token,
+      )
+    ).response.status,
+    200,
+  );
+  const noticePath = `notifications/${oldTaskNotice.id}`;
+  assert.equal(
+    (await call(noticePath, "GET", undefined, token)).response.status,
+    404,
+  );
+  assert.equal(
+    (await call(`${noticePath}/read`, "POST", {}, undefined, cookie)).response
+      .status,
+    404,
+  );
+  const readResults = await Promise.all([
+    call(`${noticePath}/read`, "POST", {}, head.token),
+    call(`${noticePath}/read`, "POST", {}, head.token),
+  ]);
+  for (const result of readResults) assert.equal(result.response.status, 200);
+  assert.deepEqual(readResults[0].body.data, readResults[1].body.data);
+  assert.equal(
+    (await call("notifications/unread-count", "GET", undefined, head.token))
+      .body.data.unreadCount,
+    3,
+  );
+  assert.equal(
+    (await call("notifications?state=read", "GET", undefined, head.token)).body
+      .data.total,
+    1,
+  );
+  assert.equal(
+    (
+      await call(
+        "notifications?state=unread&pageSize=1&page=9",
+        "GET",
+        undefined,
+        head.token,
+      )
+    ).body.data.items.length,
+    0,
+  );
+  assert.equal(
+    (await call("notifications", "GET", undefined, undefined, cookie)).body.data
+      .total,
+    0,
+  );
+  const readNotice = (await call(noticePath, "GET", undefined, head.token)).body
+    .data;
+  server.child.kill("SIGTERM");
+  await server.closed;
+  server = startServer();
+  await ready();
+  assert.deepEqual(
+    (await call(noticePath, "GET", undefined, head.token)).body.data,
+    readNotice,
+  );
+  assert.equal(
+    (await call("notifications/unread-count", "GET", undefined, head.token))
+      .body.data.unreadCount,
+    3,
+  );
   assert.equal(
     (await call("auth/logout", "POST", undefined, token)).response.status,
     200,
@@ -477,7 +555,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission, sequential approval/rejection/withdrawal, task and history authorization, duplicate/conflict rejection, all terminal records and notifications survive production restart, logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions, history authorization, notification inbox/detail/filter/count, owned idempotent read marking, stale task targets, terminal records and read timestamps survive production restart, logout.",
   );
 } finally {
   server.child.kill("SIGTERM");
