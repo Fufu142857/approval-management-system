@@ -35,6 +35,20 @@ const dateError = { message: "结束日期不能早于开始日期", path: ["end
 export const travelDraftSchema = z
   .strictObject(draftFields)
   .refine(datesOrdered, dateError);
+// Validate persisted fixed fields again at submission; optional companions/remarks stay optional.
+export const completeTravelSchema = z
+  .strictObject({
+    ...draftFields,
+    title: draftFields.title.removeDefault().min(1),
+    departure: draftFields.departure.removeDefault().min(1),
+    destination: draftFields.destination.removeDefault().min(1),
+    purpose: draftFields.purpose.removeDefault().min(1),
+    transportation: draftFields.transportation.removeDefault().min(1),
+    startDate: date,
+    endDate: date,
+    budget,
+  })
+  .refine(datesOrdered, dateError);
 export const draftVersionSchema = z.strictObject({
   version: z.number().int().min(1).max(2147483647),
 });
@@ -59,4 +73,9 @@ export type TravelDraft = TravelDraftInput & {
   createdAt: string;
   updatedAt: string;
   submittedAt: null;
+};
+
+export type TravelApplication = Omit<TravelDraft, "status" | "submittedAt"> & {
+  status: "pending" | "approved" | "rejected" | "withdrawn";
+  submittedAt: string;
 };

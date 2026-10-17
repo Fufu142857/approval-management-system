@@ -1,6 +1,6 @@
-# 身份、组织与差旅草稿 HTTP 接口
+# 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 增加差旅草稿接口，尚无对应页面、提交审批、附件、通知或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。所有成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。尚无差旅页面、通过/驳回/撤回操作、附件、通知查询或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。所有成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
@@ -94,11 +94,37 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 }
 ```
 
+## S3b 固定差旅提交与详情
+
+| 方法与路径                         | 权限与请求                                | 成功响应                                      |
+| ---------------------------------- | ----------------------------------------- | --------------------------------------------- |
+| POST /api/travel-drafts/:id/submit | 本人草稿；JSON 只允许 `{ "version": 1 }`  | 200，`{ application, workflow, tasks, logs }` |
+| GET /api/travel-applications/:id   | 本人或该申请当前 pending 任务的实际审批人 | 200，同上                                     |
+
+两者都要求有效会话、active 账号和有效确认部门。管理员无正文特权，后续 blocked 节点审批人暂不能访问；不属于授权范围、没有提交或不存在均返回 404。角色调整不会改写旧实例或重新挑选审批人；旧实际审批人仍 active 且部门有效时，重新登录后可访问其当前任务，即使已移除该角色。停用账号不能访问；自动转派未实现。
+
+提交先取得组织共享锁和申请行锁，检查 owner/draft/version，再从数据库读取完整字段重新校验。title、departure、destination、purpose、transportation 必须非空，startDate/endDate/budget 必填；companions/remarks 可为空。日期、长度和金额范围沿用草稿约束，零预算有效，不引入金额阈值。保存成功不等于满足提交条件，缺字段返回 400 VALIDATION_ERROR 和 fieldErrors。
+
+固定规则 `fixed-travel-v1`：**申请人当前确认部门的唯一有效 department_head → 全组织唯一有效 finance_approver**。有效指 active 账号且所属部门 active；财务角色不限定必须归属财务部。不足一人或多于一人返回 409 APPROVER_UNRESOLVED，路径包含申请人本人返回 409 SELF_APPROVAL；不跳过、不随机选人，由管理员核验授权。同一个非申请人同时具有两种角色可承担两步，但仍是两个顺序任务。本规则是本轮采用的明确业务默认值，不是用户已确认的组织制度；后续如调整，新规则须另有版本标识，旧快照保持不变。
+
+一次事务写入 pending 状态、version+1、提交时间和当前部门，保留原编号；保存固定规则、预算/天数、申请人/部门及两级实际审批人的名称/ID快照；创建首个 pending 和第二个 blocked 任务、一条 submitted 日志、一条给首节点审批人的持久化通知。任一步失败全部回滚，失败不留下任务或通知。实例与日志禁止更新/删除，提交后不能用草稿接口编辑或删除。
+
+并发相同提交只有一次成功；随后重复提交返回 409 NOT_DRAFT，不重放 200，也不重复产生通知。仍为草稿但版本已变返回 409 VERSION_CONFLICT；版本达上限返回 409 VERSION_LIMIT。遇到超时或不确定结果，先 GET 提交后详情确认；若仍为草稿，再读取最新草稿版本和内容，由使用者决定是否重新提交，不盲目重试覆盖。
+
+返回结构：
+
+- application：草稿的固定字段及身份/编号/时间，status 当前为 pending、submittedAt 非空、version 为提交后的版本；金额仍为字符串、日期仍为 YYYY-MM-DD。
+- workflow：id、ruleVersion、submittedVersion、routeSnapshot、createdAt。routeSnapshot 包含 ruleVersion、policy、applicant（id/name/departmentId/departmentName）、budget、durationDays、steps；每步含 seqNo/name/rule/approver（同上四个人员字段）。仅保留固定执行快照，无模板编辑或解释 API。
+- tasks：按 seqNo 升序，id/seqNo/name/approverId/status/createdAt。
+- logs：按 createdAt/id 升序，id/taskId/actorId/action/opinion/result/applicationVersion/createdAt；提交记录 taskId=null、action=submitted、opinion=""、result=pending。
+
+所有 HTTP 时间点为 ISO 8601。通知按 recipient_id/event_key 唯一，事件键为 `task:<任务UUID>:pending`。**目前只持久化通知，没有列表、未读数、已读、轮询或跳转界面**；待办列表和审批动作也尚未提供，不把数据库枚举当作功能已完成。
+
 ## 错误和接入文件
 
 400：VALIDATION_ERROR / INVALID_JSON / INVALID_DEPARTMENT；401：UNAUTHENTICATED / INVALID_CREDENTIALS；403：FORBIDDEN / INVALID_ORIGIN；404：NOT_FOUND；409：ALREADY_EXISTS / SELF_ACCESS_CHANGE；413：PAYLOAD_TOO_LARGE；415：UNSUPPORTED_MEDIA_TYPE；429：RATE_LIMITED；500：INTERNAL_ERROR。登录错误不区分用户不存在、密码错误和已禁用。500 不回传 SQL 或异常堆栈。
 
-差旅草稿新增：403 ACCOUNT_NOT_ACTIVE / DEPARTMENT_INACTIVE；409 NOT_DRAFT / VERSION_CONFLICT / VERSION_LIMIT。金额、日期、版本与白名单错误均沿用 400 VALIDATION_ERROR。已存在但不属于自己的草稿与不存在的 ID 均为 404 NOT_FOUND。
+差旅新增：403 ACCOUNT_NOT_ACTIVE / DEPARTMENT_INACTIVE；409 NOT_DRAFT / VERSION_CONFLICT / VERSION_LIMIT / APPROVER_UNRESOLVED / SELF_APPROVAL。金额、日期、版本与白名单错误均沿用 400 VALIDATION_ERROR。已存在但不属于访问范围的申请与不存在的 ID 均为 404 NOT_FOUND。
 
 - `src/lib/identity.ts`：输入 schema、角色代码、UserIdentity 类型，可供 S2c 页面共享。
 - `src/server/identity-handlers.ts`：HTTP 适配；`src/app/api/**/route.ts` 只导出对应处理器。
@@ -110,5 +136,10 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 - `src/server/travel-handlers.ts` / `src/app/api/travel-drafts/**/route.ts`：五个草稿 HTTP 处理器及路由。
 - `src/server/travel.ts`：createTravelDraft(token, input)、listTravelDrafts(token, input)、getTravelDraft(token, id)、replaceTravelDraft(token, id, input)、deleteTravelDraft(token, id, version)。直接调用服务前必须使用对应 schema 验证输入及 UUID；共享事务规则见上文。
 - `tests/travel.test.ts`：真实数据库草稿权限、校验、并发、回滚和迁移保留验证；`scripts/smoke-identity.mjs` 在原身份 HTTP 验收中追加草稿 CRUD、服务进程重启与持久化验证。
+- `src/server/business-auth.ts`：`requireBusinessActor(token: string | undefined, client: PoolClient)`；事务内先取组织共享锁再检查身份、锁会话和有效部门，草稿与提交复用，不能在事务外调用。
+- `src/lib/travel.ts`：`completeTravelSchema` 与 `TravelApplication` 是固定差旅的完整校验/返回类型；没有动态字段配置。
+- `src/server/travel-submission.ts`：`submitTravelDraft(token: string | undefined, id: string, version: number)`、`getTravelApplication(token: string | undefined, id: string)`；各自负责事务，直接调用前必须校验 UUID 与 version，提交时服务端仍校验已存表单。
+- `src/server/travel-submission-handlers.ts`：HTTP 来源/正文/参数验证和统一响应；两个新路由仅导出处理器。
+- `tests/travel-submission.test.ts`：15 项提交、快照、权限、竞争、回滚、不可变与去重约束测试；HTTP 脚本另验证生产路由、重复提交拒绝、详情授权，以及实际重启后申请/快照/任务/日志/通知保留。
 
 实现参考：[OWASP 会话管理](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)、[node-postgres 事务](https://node-postgres.com/features/transactions)、[Zod 输入校验](https://zod.dev/api)。

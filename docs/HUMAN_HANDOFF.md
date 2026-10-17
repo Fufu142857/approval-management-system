@@ -1,6 +1,6 @@
 # 人工模块交接边界
 
-**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a 固定差旅草稿后端也已完成，下一步 S3b 固定差旅提交与审批基础。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
+**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a 草稿和 S3b 固定差旅提交/详情后端也已完成，下一步 S3c 固定审批动作与撤回。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
 
 ## 独立完成范围
 
@@ -24,7 +24,13 @@ S3a 已有固定差旅草稿：`POST/GET /api/travel-drafts` 和 `GET/PUT/DELETE
 
 002 迁移建立 applications / travel_requests；目前仅允许固定 travel 类型，不包含动态字段、流程模板、版本发布或规则解析。草稿的公共主表不是自定义模块已经可接入的承诺，后续 S3–S4 仍需补齐固定业务能力。
 
-附件、提交审批和通知接口仍**未实现**；现有身份与草稿能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
+S3b 已有 `POST /api/travel-drafts/:id/submit`（只收 version）和 `GET /api/travel-applications/:id`。服务在 `src/server/travel-submission.ts`：`submitTravelDraft(token: string | undefined, id: string, version: number)` 与 `getTravelApplication(token: string | undefined, id: string)`，返回 application/workflow/tasks/logs。服务自行开事务，HTTP 参数校验和权限契约见 API.md；固定 v1 的两步选择只适用于差旅，不是通用配置解析器。
+
+`src/server/business-auth.ts` 的 `requireBusinessActor(token: string | undefined, client: PoolClient)` 是草稿/提交共用的事务内身份检查，先组织 72002 共享锁，再会话/有效部门锁；不能在事务外使用。状态变更还须锁申请行，先核版本后写业务、待办、日志、通知；组织写入使用同号排他锁。
+
+003 新增固定执行所需 approval_instances/tasks/logs/notifications，实例与日志不可更新/删除，首个任务 pending、下一步 blocked。通知按接收人和事件键去重。当前用固定版本标识与不可变 JSON 快照，不含模板配置/发布/版本表或动态字段；完整模型及真实可复用边界到 S4 再冻结。
+
+附件、通过/驳回/撤回、待办/已办列表和通知读取接口仍**未实现**；通知只有首条待办事件持久化，现有能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 到达 S5 前必须填写的交接资料
 

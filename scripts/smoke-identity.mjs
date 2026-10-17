@@ -213,6 +213,124 @@ try {
     (await call(path, "GET", undefined, token)).response.status,
     404,
   );
+  async function approver(label, role, approverDepartmentId) {
+    const approverUsername = `smoke_${label}_${Date.now()}`;
+    const registered = await call("auth/register", "POST", {
+      username: approverUsername,
+      fullName: `HTTP ${label}`,
+      email: `${approverUsername}@example.invalid`,
+      password,
+      requestedDepartmentId: approverDepartmentId,
+    });
+    assert.equal(registered.response.status, 201);
+    const authorized = await call(
+      `admin/users/${registered.body.data.id}/access`,
+      "PATCH",
+      {
+        departmentId: approverDepartmentId,
+        status: "active",
+        roles: ["employee", role],
+        reason: "生产 HTTP 固定差旅提交验收",
+      },
+      undefined,
+      cookie,
+    );
+    assert.equal(authorized.response.status, 200);
+    const loggedIn = await call("auth/login", "POST", {
+      username: approverUsername,
+      password,
+      client: "mobile",
+    });
+    assert.equal(loggedIn.response.status, 200);
+    return { id: registered.body.data.id, token: loggedIn.body.data.token };
+  }
+  const head = await approver("head", "department_head", departmentId);
+  const financeDepartment = departments.body.data.find(
+    (d) => d.name === "财务部",
+  );
+  assert(financeDepartment);
+  const finance = await approver(
+    "finance",
+    "finance_approver",
+    financeDepartment.id,
+  );
+  const toSubmit = await call("travel-drafts", "POST", travel, token);
+  assert.equal(toSubmit.response.status, 201);
+  const submitPath = `travel-drafts/${toSubmit.body.data.id}/submit`;
+  const submitted = await call(submitPath, "POST", { version: 1 }, token);
+  assert.equal(submitted.response.status, 200);
+  const detail = submitted.body.data;
+  assert.equal(detail.application.status, "pending");
+  assert.equal(detail.application.version, 2);
+  assert.equal(detail.workflow.ruleVersion, "fixed-travel-v1");
+  assert.deepEqual(
+    detail.tasks.map((task) => [task.approverId, task.status]),
+    [
+      [head.id, "pending"],
+      [finance.id, "blocked"],
+    ],
+  );
+  assert.equal(detail.logs.length, 1);
+  assert.equal(detail.logs[0].action, "submitted");
+  assert.equal(
+    (await call(submitPath, "POST", { version: 1 }, token)).response.status,
+    409,
+  );
+  const detailPath = `travel-applications/${detail.application.id}`;
+  assert.equal(
+    (await call(detailPath, "GET", undefined, head.token)).response.status,
+    200,
+  );
+  assert.equal(
+    (await call(detailPath, "GET", undefined, finance.token)).response.status,
+    404,
+  );
+  assert.equal(
+    (await call(detailPath, "GET", undefined, undefined, cookie)).response
+      .status,
+    404,
+  );
+  assert.equal(
+    (
+      await call(
+        `travel-drafts/${detail.application.id}`,
+        "DELETE",
+        { version: 2 },
+        token,
+      )
+    ).response.status,
+    409,
+  );
+  server.child.kill("SIGTERM");
+  await server.closed;
+  server = startServer();
+  await ready();
+  assert.deepEqual(
+    (await call(detailPath, "GET", undefined, token)).body.data,
+    detail,
+  );
+  assert.equal(
+    (await call(detailPath, "GET", undefined, head.token)).response.status,
+    200,
+  );
+  // No notifications HTTP endpoint yet: inspect only the isolated test database.
+  const persisted = new Pool({
+    connectionString: process.env.TEST_DATABASE_URL,
+  });
+  try {
+    const notices = await persisted.query(
+      "SELECT recipient_id,event_key FROM notifications WHERE app_id=$1",
+      [detail.application.id],
+    );
+    assert.deepEqual(notices.rows, [
+      {
+        recipient_id: head.id,
+        event_key: `task:${detail.tasks[0].id}:pending`,
+      },
+    ]);
+  } finally {
+    await persisted.end();
+  }
   assert.equal(
     (await call("auth/logout", "POST", undefined, token)).response.status,
     200,
@@ -227,7 +345,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: register, Cookie/Bearer login, confirmation, revocation, authorization, audit, travel draft CRUD/conflicts/ownership, production restart persistence, logout.",
+    "Production HTTP smoke passed: identity, draft CRUD/conflicts/ownership, fixed travel submission/snapshots/tasks/log/notice, detail authorization, duplicate submission, production restart persistence, logout.",
   );
 } finally {
   server.child.kill("SIGTERM");
