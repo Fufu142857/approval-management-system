@@ -1,7 +1,7 @@
 # 企业审批系统 · B/S 课程作业
 
 依据本地外层目录中的作业要求与设计文档分阶段开发。两份 PDF 是隐私资料，不随仓库发布；本地路径为 `../Assignment.pdf` 与 `../Design.pdf`。
-已完成：**S0 仓库与需求基线、S1 工程骨架、S2 用户与组织（数据库、身份接口、Web 页面及公共外观对齐）**。下一步从 S3a 固定差旅数据与草稿开始，具体检查点见 [当前进度](docs/STATUS.md)。三类审批、自定义流程与最终 Docker 部署尚未完成。
+已完成：**S0 仓库与需求基线、S1 工程骨架、S2 用户与组织（数据库、身份接口、Web 页面及公共外观对齐）**。**S3a 差旅草稿后端**也已完成；下一步 S3b 固定差旅提交与审批基础，具体检查点见 [当前进度](docs/STATUS.md)。三类审批、自定义流程与最终 Docker 部署尚未完成。
 
 独立远程：[Fufu142857/approval-management-system](https://github.com/Fufu142857/approval-management-system)。
 
@@ -10,7 +10,7 @@
 ## 开发资料
 
 - [当前进度与新 Agent 接续入口（先读）](docs/STATUS.md)
-- [已有 HTTP 接口与认证约定](docs/API.md)
+- [已有 HTTP 接口、差旅草稿与认证约定](docs/API.md)
 - [身份管理页面、使用方法与浏览器验收](docs/WEB_IDENTITY.md)
 - [界面原型依据与外观约束](docs/UI_GUIDELINES.md)
 - [阶段计划与验收条件](docs/DEVELOPMENT_PLAN.md)
@@ -30,7 +30,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-先按 DATABASE.md 启动并初始化数据库，再访问 http://localhost:3000；地址必须与 APP_ORIGIN 一致。首页进入登录或个人信息；管理员可访问用户管理和审计页面。`GET /api/health` 仍只检查 Web 进程存活。
+先按 DATABASE.md 启动并初始化数据库，再访问 http://localhost:3000；地址必须与 APP_ORIGIN 一致。首页进入登录或个人信息；管理员可访问用户管理和审计页面。差旅草稿目前仅有 HTTP API，页面尚未接入；新增迁移通过 `pnpm db:migrate` 应用，不需要重置或重新初始化数据库。`GET /api/health` 仍只检查 Web 进程存活。
 
 ```sh
 pnpm lint
@@ -42,7 +42,7 @@ pnpm test:http
 pnpm test:e2e
 ```
 
-测试前按 [数据库说明](docs/DATABASE.md) 设置独立 TEST_DATABASE_URL。`test:http` 和 `test:e2e` 需要先 build，分别在 127.0.0.1:3100/3101 启动临时生产服务并自动关闭；三组测试均清空测试库身份数据，不要并行运行。首次浏览器测试执行 `pnpm exec playwright install chromium`，或使用本机 Chrome：`E2E_BROWSER_CHANNEL=chrome pnpm test:e2e`。本机原生 PostgreSQL 已验证，Docker 引擎运行验证仍待完成。
+测试前按 [数据库说明](docs/DATABASE.md) 设置独立 TEST_DATABASE_URL。`test:http` 和 `test:e2e` 需要先 build，分别在 127.0.0.1:3100/3101 启动临时生产服务并自动关闭；三组测试均可能级联清空测试库身份与业务数据，不要并行运行。首次浏览器测试执行 `pnpm exec playwright install chromium`，或使用本机 Chrome：`E2E_BROWSER_CHANNEL=chrome pnpm test:e2e`。本机原生 PostgreSQL 已验证，Docker 引擎运行验证仍待完成。
 
 ## 开发与署名
 

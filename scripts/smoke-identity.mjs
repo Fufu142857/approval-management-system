@@ -29,30 +29,44 @@ execFileSync(
   },
 );
 const origin = "http://127.0.0.1:3100";
-const child = spawn(
-  process.execPath,
-  [
-    "node_modules/next/dist/bin/next",
-    "start",
-    "--hostname",
-    "127.0.0.1",
-    "--port",
-    "3100",
-  ],
-  {
-    env: {
-      ...process.env,
-      DATABASE_URL: process.env.TEST_DATABASE_URL,
-      APP_ORIGIN: origin,
-      SESSION_COOKIE_SECURE: "false",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  },
-);
 let output = "";
-child.stdout.on("data", (chunk) => (output += chunk));
-child.stderr.on("data", (chunk) => (output += chunk));
-const closed = new Promise((resolve) => child.on("close", resolve));
+function startServer() {
+  output = "";
+  const child = spawn(
+    process.execPath,
+    [
+      "node_modules/next/dist/bin/next",
+      "start",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      "3100",
+    ],
+    {
+      env: {
+        ...process.env,
+        DATABASE_URL: process.env.TEST_DATABASE_URL,
+        APP_ORIGIN: origin,
+        SESSION_COOKIE_SECURE: "false",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  child.stdout.on("data", (chunk) => (output += chunk));
+  child.stderr.on("data", (chunk) => (output += chunk));
+  const closed = new Promise((resolve) => child.on("close", resolve));
+  return { child, closed };
+}
+let server = startServer();
+async function ready() {
+  for (let i = 0; i < 100; i++) {
+    if (server.child.exitCode !== null)
+      throw new Error("Test server exited: " + output);
+    if (output.includes("Ready")) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("Test server did not become ready");
+}
 async function call(path, method = "GET", body, token, cookie) {
   const response = await fetch(`${origin}/api/${path}`, {
     method,
@@ -69,13 +83,7 @@ async function call(path, method = "GET", body, token, cookie) {
   return { response, body: await response.json() };
 }
 try {
-  for (let i = 0; i < 100; i++) {
-    if (child.exitCode !== null)
-      throw new Error("Test server exited: " + output);
-    if (output.includes("Ready")) break;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  assert(output.includes("Ready"), "Test server did not become ready");
+  await ready();
   const departments = await call("departments");
   assert.equal(departments.response.status, 200);
   const departmentId = departments.body.data[0].id;
@@ -144,6 +152,67 @@ try {
       .response.status,
     200,
   );
+  const travel = {
+    title: "HTTP 差旅草稿",
+    departure: "杭州",
+    destination: "上海",
+    startDate: "2028-02-28",
+    endDate: "2028-03-01",
+    purpose: "客户交流",
+    companions: "",
+    transportation: "高铁",
+    budget: "1234.56",
+  };
+  const created = await call("travel-drafts", "POST", travel, token);
+  assert.equal(created.response.status, 201);
+  const saved = created.body.data;
+  assert.equal(saved.applicantId, id);
+  assert.equal(saved.durationDays, 3);
+  assert.equal(saved.budget, "1234.56");
+  assert.match(saved.appNo, /^APP-[1-9]\d*$/);
+  const path = `travel-drafts/${saved.id}`;
+  assert.equal(
+    (await call(path, "GET", undefined, undefined, cookie)).response.status,
+    404,
+  );
+  assert.equal(
+    (await call("travel-drafts", "GET", undefined, token)).body.data.total,
+    1,
+  );
+  // Restart the actual production process without resetting the database or sessions.
+  server.child.kill("SIGTERM");
+  await server.closed;
+  server = startServer();
+  await ready();
+  assert.deepEqual(
+    (await call(path, "GET", undefined, token)).body.data,
+    saved,
+  );
+  const changed = await call(
+    path,
+    "PUT",
+    { ...travel, budget: "0.01", version: 1 },
+    token,
+  );
+  assert.equal(changed.response.status, 200);
+  assert.equal(changed.body.data.version, 2);
+  assert.equal(changed.body.data.budget, "0.01");
+  assert.equal(
+    (await call(path, "PUT", { ...travel, version: 1 }, token)).response.status,
+    409,
+  );
+  assert.equal(
+    (await call(path, "DELETE", { version: 1 }, token)).response.status,
+    409,
+  );
+  assert.equal(
+    (await call(path, "DELETE", { version: 2 }, token)).response.status,
+    200,
+  );
+  assert.equal(
+    (await call(path, "GET", undefined, token)).response.status,
+    404,
+  );
   assert.equal(
     (await call("auth/logout", "POST", undefined, token)).response.status,
     200,
@@ -158,9 +227,9 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: register, Cookie/Bearer login, confirmation, revocation, authorization, audit, logout.",
+    "Production HTTP smoke passed: register, Cookie/Bearer login, confirmation, revocation, authorization, audit, travel draft CRUD/conflicts/ownership, production restart persistence, logout.",
   );
 } finally {
-  child.kill("SIGTERM");
-  await closed;
+  server.child.kill("SIGTERM");
+  await server.closed;
 }
