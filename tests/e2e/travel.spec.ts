@@ -61,6 +61,7 @@ test("差旅草稿填写、校验、附件预览下载删除、提交及只读�
   page.on("pageerror", (error) => errors.push(error.message));
   await signIn(page, "roster_01");
   await page.getByRole("link", { name: "我的申请", exact: true }).click();
+  await page.getByRole("link", { name: "草稿管理", exact: true }).click();
   await expect(page.getByText("暂无差旅草稿，点击新建开始填写")).toBeVisible();
   await page.getByRole("link", { name: "＋ 新建差旅申请" }).click();
   await page.getByRole("button", { name: "提交申请", exact: true }).click();

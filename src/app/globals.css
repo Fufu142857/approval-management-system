@@ -1125,3 +1125,44 @@ summary {
   height: auto;
   border: 1px solid var(--line);
 }
+
+/* Fixed travel lists and decisions use the existing monochrome panel vocabulary. */
+.travel-list-filters {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px 18px;
+  padding: 20px;
+  align-items: end;
+}
+.travel-list-filters > :nth-child(5) {
+  grid-column: span 2;
+}
+.travel-list-filters > .actions {
+  grid-column: span 2;
+}
+.list-time-hint {
+  padding: 0 20px 12px;
+}
+.travel-decision textarea {
+  width: 100%;
+}
+.travel-decision .actions {
+  margin-top: 16px;
+}
+@media (max-width: 1000px) {
+  .travel-list-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .travel-list-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .travel-list-filters > :nth-child(5),
+  .travel-list-filters > .actions {
+    grid-column: auto;
+  }
+}

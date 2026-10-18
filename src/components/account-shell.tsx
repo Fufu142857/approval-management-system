@@ -65,28 +65,33 @@ export function AccountShell({
   ];
   const management = pathname.startsWith("/admin/");
   const travel = pathname.startsWith("/travel/");
-  const title = travel
-    ? pathname === "/travel/drafts"
-      ? "我的申请"
-      : pathname.startsWith("/travel/applications/")
-        ? "差旅申请详情"
-        : "差旅申请"
-    : pathname === "/admin/users"
-      ? "用户管理"
-      : pathname === "/admin/audit"
-        ? "操作审计"
-        : "个人信息";
-  const subtitle = travel
-    ? pathname === "/travel/drafts"
-      ? "管理差旅草稿，继续填写并提交申请"
-      : pathname.startsWith("/travel/applications/")
-        ? "查看申请内容、审批进度与历史记录"
-        : "填写差旅信息，提交后进入审批流程"
-    : pathname === "/admin/users"
-      ? "维护用户的部门归属与角色权限"
-      : pathname === "/admin/audit"
-        ? "查看授权与配置变更记录"
-        : "查看个人资料、部门与角色权限";
+  const taskList = pathname.startsWith("/travel/tasks");
+  const title = taskList
+    ? "我的待办"
+    : travel
+      ? ["/travel/drafts", "/travel/applications"].includes(pathname)
+        ? "我的申请"
+        : pathname.startsWith("/travel/applications/")
+          ? "差旅申请详情"
+          : "差旅申请"
+      : pathname === "/admin/users"
+        ? "用户管理"
+        : pathname === "/admin/audit"
+          ? "操作审计"
+          : "个人信息";
+  const subtitle = taskList
+    ? "处理当前审批任务，查看已办记录"
+    : travel
+      ? ["/travel/drafts", "/travel/applications"].includes(pathname)
+        ? "查询本人申请，管理草稿与审批进度"
+        : pathname.startsWith("/travel/applications/")
+          ? "查看申请内容、审批进度与历史记录"
+          : "填写差旅信息，提交后进入审批流程"
+      : pathname === "/admin/users"
+        ? "维护用户的部门归属与角色权限"
+        : pathname === "/admin/audit"
+          ? "查看授权与配置变更记录"
+          : "查看个人资料、部门与角色权限";
   return (
     <>
       <a href="#main" className="skip-link">
@@ -100,13 +105,22 @@ export function AccountShell({
           </Link>
           <nav aria-label="主导航">
             {futureLinks.map((link) =>
-              link.label === "我的申请" && user.status === "active" ? (
+              ["我的申请", "我的待办"].includes(link.label) &&
+              user.status === "active" ? (
                 <Link
                   key={link.label}
                   className="nav-item"
-                  href="/travel/drafts"
+                  href={
+                    link.label === "我的申请"
+                      ? "/travel/applications"
+                      : "/travel/tasks"
+                  }
                   prefetch={false}
-                  aria-current={travel ? "page" : undefined}
+                  aria-current={
+                    (link.label === "我的待办" ? taskList : travel && !taskList)
+                      ? "page"
+                      : undefined
+                  }
                 >
                   <Icon name={link.icon} />
                   {link.label}

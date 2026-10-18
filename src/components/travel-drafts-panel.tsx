@@ -6,6 +6,7 @@ import type { PageResult } from "@/lib/identity-display";
 import { travelTime } from "@/lib/travel-display";
 import { useResource } from "./use-resource";
 import { Pager } from "./ui";
+import { TravelListNavigation } from "./travel-list-panel";
 import { TravelFailure } from "./travel-common";
 
 export function TravelDraftsPanel() {
@@ -17,6 +18,7 @@ export function TravelDraftsPanel() {
   );
   return (
     <div className="stack">
+      <TravelListNavigation mode="drafts" />
       <div className="page-heading">
         <div>
           <h2>差旅草稿</h2>

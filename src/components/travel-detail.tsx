@@ -1,5 +1,8 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
+import { Notice } from "./ui";
+import { TravelDecisionPanel } from "./travel-decision-panel";
 import {
   travelStatusNames,
   taskStatusNames,
@@ -10,7 +13,16 @@ import {
 import { useResource } from "./use-resource";
 import { AttachmentItems, TravelFailure } from "./travel-common";
 
-export function TravelDetail({ id }: { id: string }) {
+export function TravelDetail({
+  id,
+  viewerId,
+}: {
+  id: string;
+  viewerId: string;
+}) {
+  const [opinion, setOpinion] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
   const detail = useResource<Detail>(`/travel-applications/${id}`);
   const files = useResource<TravelAttachmentList>(
     `/travel-applications/${id}/attachments`,
@@ -23,14 +35,18 @@ export function TravelDetail({ id }: { id: string }) {
     return (
       <div className="stack">
         <TravelFailure message={detail.error || files.error!} retry={reload} />
-        <Link href="/travel/drafts">返回草稿列表</Link>
+        <Link href="/travel/applications">返回我的申请</Link>
+        <Link href="/travel/tasks">返回我的待办</Link>
       </div>
     );
   if (!detail.data || !files.data)
     return (
-      <p className="empty-state" role="status">
-        正在加载差旅申请…
-      </p>
+      <div className="stack">
+        {message && <Notice>{message}</Notice>}
+        <p className="empty-state" role="status">
+          正在加载差旅申请…
+        </p>
+      </div>
     );
   const { application: app, workflow, tasks, logs } = detail.data;
   if (app.version !== files.data.version)
@@ -48,11 +64,19 @@ export function TravelDetail({ id }: { id: string }) {
           .name ?? "历史操作人");
   return (
     <div className="stack travel-workspace">
+      {message && <Notice>{message}</Notice>}
       <div className="section-heading">
-        <Link className="text-button" href="/travel/drafts">
-          ← 返回草稿列表
+        <Link
+          className="text-button"
+          href={
+            app.applicantId === viewerId
+              ? "/travel/applications"
+              : "/travel/tasks"
+          }
+        >
+          {app.applicantId === viewerId ? "← 返回我的申请" : "← 返回我的待办"}
         </Link>
-        <button className="button secondary" onClick={reload}>
+        <button className="button secondary" disabled={busy} onClick={reload}>
           刷新详情
         </button>
       </div>
@@ -65,7 +89,7 @@ export function TravelDetail({ id }: { id: string }) {
           {app.appNo} · 提交于 {travelTime(app.submittedAt)}
         </p>
         <p className="hint">
-          申请已提交，表单与附件只读。可保存当前地址以便再次查看。
+          申请已提交，表单与附件只读；审批与撤回操作按当前权限开放。
         </p>
         <dl className="travel-details">
           <div>
@@ -142,8 +166,21 @@ export function TravelDetail({ id }: { id: string }) {
       </section>
       <section className="panel travel-section">
         <h2>补充附件</h2>
-        <AttachmentItems appId={id} items={files.data.items} />
+        <AttachmentItems appId={id} items={files.data.items} disabled={busy} />
       </section>
+      <TravelDecisionPanel
+        detail={detail.data}
+        viewerId={viewerId}
+        opinion={opinion}
+        onOpinion={setOpinion}
+        onBusy={setBusy}
+        reload={reload}
+        onDone={(value) => {
+          setOpinion("");
+          setMessage(value);
+          reload();
+        }}
+      />
       <section className="panel travel-section">
         <h2>历史记录</h2>
         <ol className="travel-timeline">

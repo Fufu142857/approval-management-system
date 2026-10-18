@@ -1,6 +1,6 @@
 # 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；尚无这些列表页面、审批页面或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；S3h 已接入这些列表及审批/撤回页面（见 WEB_TRAVEL_APPROVAL.md），尚无自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
@@ -237,7 +237,7 @@ Attachment：`id, appId, uploaderId, originalName, mimeType, sizeBytes, sha256, 
 
 GET 不写审批日志、不改变通知已读状态或申请版本。审批/撤回仍须重新读取详情并提交最新 version、实际 taskId，由既有动作接口再次鉴权和校验，不可仅根据列表中的旧状态直接认定成功。
 
-代码入口：src/lib/travel-lists.ts 定义两个严格 schema、输入和摘要类型；src/server/travel-list-handlers.ts 处理查询参数与 HTTP 边界；src/server/travel-lists.ts 的 listTravelApplications(token, input)、listTravelTasks(token, input) 各自开启事务并验证身份，直接服务调用前须解析相应 schema。007 仅补查询索引，见 DATABASE.md。测试见 tests/travel-lists.test.ts 与生产 HTTP 脚本；本轮未接入列表/审批 UI。
+代码入口：src/lib/travel-lists.ts 定义两个严格 schema、输入和摘要类型；src/server/travel-list-handlers.ts 处理查询参数与 HTTP 边界；src/server/travel-lists.ts 的 listTravelApplications(token, input)、listTravelTasks(token, input) 各自开启事务并验证身份，直接服务调用前须解析相应 schema。007 仅补查询索引，见 DATABASE.md。测试见 tests/travel-lists.test.ts 与生产 HTTP 脚本；S3h 已接入列表/审批 UI，后端契约不变。
 
 ## 错误和接入文件
 
