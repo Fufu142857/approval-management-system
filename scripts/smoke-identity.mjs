@@ -279,6 +279,55 @@ try {
     (await call(submitPath, "POST", { version: 1 }, token)).response.status,
     409,
   );
+  const ownedPending = await call(
+    "travel-applications?type=travel&status=pending",
+    "GET",
+    undefined,
+    token,
+  );
+  assert.equal(ownedPending.response.status, 200);
+  assert.equal(ownedPending.body.data.total, 1);
+  assert.equal(
+    ownedPending.body.data.items[0].currentTask.id,
+    detail.tasks[0].id,
+  );
+  assert.equal(
+    (await call("travel-tasks", "GET", undefined, head.token)).body.data
+      .items[0].id,
+    detail.tasks[0].id,
+  );
+  assert.equal(
+    (await call("travel-tasks", "GET", undefined, finance.token)).body.data
+      .total,
+    0,
+  );
+  assert.equal(
+    (await call("travel-applications", "GET", undefined, undefined, cookie))
+      .body.data.total,
+    0,
+  );
+  assert.equal(
+    (await call("travel-tasks", "GET", undefined, undefined, cookie)).body.data
+      .total,
+    0,
+  );
+  assert.equal((await call("travel-applications")).response.status, 401);
+  assert.equal(
+    (await call("travel-tasks?approverId=" + head.id, "GET", undefined, token))
+      .response.status,
+    400,
+  );
+  assert.equal(
+    (
+      await call(
+        "travel-applications?from=2026-12-01&to=2026-11-01",
+        "GET",
+        undefined,
+        token,
+      )
+    ).response.status,
+    400,
+  );
   const detailPath = `travel-applications/${detail.application.id}`;
   assert.equal(
     (await call(detailPath, "GET", undefined, head.token)).response.status,
@@ -436,10 +485,60 @@ try {
     ).response.status,
     404,
   );
+  const ownedTerminal = (
+    await call("travel-applications", "GET", undefined, token)
+  ).body.data;
+  assert.deepEqual(ownedTerminal.items.map((item) => item.status).sort(), [
+    "approved",
+    "rejected",
+    "withdrawn",
+  ]);
+  const headHandled = (
+    await call("travel-tasks?state=handled", "GET", undefined, head.token)
+  ).body.data;
+  assert.equal(headHandled.total, 2);
+  assert.deepEqual(headHandled.items.map((item) => item.status).sort(), [
+    "approved",
+    "rejected",
+  ]);
+  assert.equal(
+    (await call("travel-tasks", "GET", undefined, head.token)).body.data.total,
+    0,
+  );
+  const filteredLists = (
+    await call(
+      "travel-applications?status=approved&pageSize=1&page=2",
+      "GET",
+      undefined,
+      token,
+    )
+  ).body.data;
+  assert.equal(filteredLists.total, 1);
+  assert.deepEqual(filteredLists.items, []);
+  assert.equal(
+    (
+      await call(
+        "travel-applications?keyword=" + detail.application.appNo.toLowerCase(),
+        "GET",
+        undefined,
+        token,
+      )
+    ).body.data.total,
+    1,
+  );
   server.child.kill("SIGTERM");
   await server.closed;
   server = startServer();
   await ready();
+  assert.deepEqual(
+    (await call("travel-applications", "GET", undefined, token)).body.data,
+    ownedTerminal,
+  );
+  assert.deepEqual(
+    (await call("travel-tasks?state=handled", "GET", undefined, head.token))
+      .body.data,
+    headHandled,
+  );
   for (const result of [finalDecision, rejection, withdrawal]) {
     const resultPath = `travel-applications/${result.body.data.application.id}`;
     assert.deepEqual(
@@ -663,7 +762,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; terminal records, metadata and attachment bytes survive production restart; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; terminal records, metadata and attachment bytes survive production restart; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

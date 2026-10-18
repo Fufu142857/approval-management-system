@@ -1,6 +1,6 @@
 # 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），尚无审批页面或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；尚无这些列表页面、审批页面或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
@@ -118,7 +118,7 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 - tasks：按 seqNo 升序，id/seqNo/name/approverId/status/createdAt/activatedAt/finishedAt；后两项未发生时为 null。
 - logs：按 createdAt/id 升序，id/taskId/actorId/action/opinion/result/applicationVersion/createdAt；提交记录 taskId=null、action=submitted、opinion=""、result=pending。
 
-所有 HTTP 时间点为 ISO 8601。通知按 recipient_id/event_key 唯一，事件键为 `task:<任务UUID>:pending`。**S3d 已提供通知列表/详情/未读数/已读 API，轮询和跳转界面尚未实现**；待办列表仍未提供，审批动作见下节，不把数据库枚举当作功能已完成。
+所有 HTTP 时间点为 ISO 8601。通知按 recipient_id/event_key 唯一，事件键为 `task:<任务UUID>:pending`。**S3d 已提供通知列表/详情/未读数/已读 API，轮询和跳转界面尚未实现**；待办/已办列表由 S3g 提供（见后文），审批动作见下节，不把数据库枚举当作功能已完成。
 
 ## S3c 固定差旅审批与撤回
 
@@ -196,6 +196,48 @@ Attachment：`id, appId, uploaderId, originalName, mimeType, sizeBytes, sha256, 
 新增错误：400 EMPTY_ATTACHMENT / INVALID_MULTIPART；413 ATTACHMENT_TOO_LARGE / ATTACHMENT_QUOTA_EXCEEDED / PAYLOAD_TOO_LARGE；415 UNSUPPORTED_ATTACHMENT / ATTACHMENT_TYPE_MISMATCH / INVALID_ATTACHMENT / UNSUPPORTED_MEDIA_TYPE；409 ATTACHMENT_UNAVAILABLE。文件名/UUID/版本校验沿用 400 VALIDATION_ERROR；存储或数据库内部错误返回 500 INTERNAL_ERROR，不泄露物理路径。私有目录、事务补偿与 `attachments:gc` 见 DATABASE.md。
 
 源码：`src/lib/attachments.ts` 定义类型/限制，`src/server/attachment-handlers.ts` 处理 HTTP，`src/server/travel-attachments.ts` 负责资源授权/事务，`attachment-validation.ts` 负责格式解析，`attachment-storage.ts` 负责私有文件与回收。真实服务签名见 HUMAN_HANDOFF.md；`tests/attachments.test.ts` 为本阶段验收，HTTP 脚本验证真实 multipart、下载与重启。解析参数依据 [sharp 构造器](https://sharp.pixelplumbing.com/api-constructor/) 和 [pdf-lib PDFDocument.load](https://pdf-lib.js.org/docs/api/classes/pdfdocument#load)。
+
+## S3g 固定差旅申请与任务列表
+
+| 方法 | 路径                     | 范围                                           |
+| ---- | ------------------------ | ---------------------------------------------- |
+| GET  | /api/travel-applications | 会话用户本人的差旅申请，包含草稿和各已提交状态 |
+| GET  | /api/travel-tasks        | 会话用户实际获派的当前待办或已完成决策任务     |
+
+两接口均要求有效会话、active 账号及有效确认部门。管理员、同部门人员或持有某审批角色，不因此获得其他人的列表；审批权限跟随提交时固定的实际人员，而非当前角色匹配。申请列表不混入本人审批的他人申请；任务列表不包含本人申请。草稿列表旧接口与排序不变。
+
+共同查询参数：
+
+| 参数            | 默认/限制                                        | 含义                                                     |
+| --------------- | ------------------------------------------------ | -------------------------------------------------------- |
+| page / pageSize | 1 / 20，上限 100000 / 100，正整数                | 偏移分页                                                 |
+| type            | travel，当前只允许 travel                        | 固定业务类型；采购/报销尚未实现，传入其他类型返回 400    |
+| status          | all 或 draft/pending/approved/rejected/withdrawn | **申请当前状态**，在任务列表中也不是任务原决策结果       |
+| keyword         | 空串，trim 后最多 200 字符                       | 标题或编号不区分大小写的字面子串，% 与 _ 不作为通配符    |
+| from / to       | 可省略，YYYY-MM-DD，年份 0001–9999               | 上海日历日期闭区间；允许只传一端，反向或无效日期返回 400 |
+
+任务列表另有 state=pending/handled，默认 pending。未知字段、重复参数、非法枚举/分页均返回 400 VALIDATION_ERROR；不能提交 applicantId/approverId/departmentId 来改变范围。未登录或失效/停用账号为 401，待确认或部门无效为 403。空列表返回 200，不泄露他人记录数量。
+
+时间与排序口径：申请列表 from/to 筛选 createdAt，按 createdAt DESC、id ASC；待办筛选 activatedAt，按 activatedAt DESC、任务 id ASC；已办筛选 finishedAt，按 finishedAt DESC、任务 id ASC。日期按 Asia/Shanghai 转换为包含起始日零点、不包含结束日次日零点的时间区间，和数据库会话时区无关。这不是差旅行程日期或统计提交日期筛选。
+
+返回 `{ items, total, page, pageSize }`，任务列表额外返回 state。total 是当前全部筛选条件下的条目数；超出末页仍返回真实 total 与空 items。内容、计数、申请版本和当前节点从同一 SQL 快照读取，跨分页请求仍可能因新建/审批/撤回而位移；客户端应刷新第一页，不把查询结果视为锁定的审批资格。
+
+申请摘要字段为：`id, appNo, type, title, status, version, applicant, createdAt, updatedAt, submittedAt, currentTask`。
+
+- applicant：`{ id, name, departmentId, departmentName }`。已提交采用不可变人员/部门名称快照；草稿按存储的申请人及部门读取当前名称，保存时仍由现有服务更新所属部门。
+- currentTask：审批中为 `{ id, seqNo, name, approver: { id, name } }`，其他状态为 null。姓名来自提交快照；不返回未来节点或整份业务正文。
+- 时间点为含时区 ISO 8601；草稿 submittedAt 为 null。正文和附件需调用已有受控详情接口；草稿进入草稿接口，已提交进入申请详情接口。
+
+任务条目为：`{ id, seqNo, name, status, activatedAt, finishedAt, application: 申请摘要 }`。
+
+- pending 仅包含任务 pending、申请 pending、已激活且此前节点均已通过的本人实际任务；未来 blocked 不出现，不能自审。finishedAt 为 null。
+- handled 仅包含本人已激活且 approved/rejected 的决策任务，保留原节点结果和完成时间；application.status/currentTask 显示当前申请状态。已办通过的申请仍可能待下一人审批，或后来被撤回/驳回。
+- cancelled 不计为已办，无论此前是否激活；已激活人员仍可按已有详情权限读取历史。未来未激活即取消的节点无正文权限。
+- 同一人员处理两步，按两条不同任务记录计算 total；本人申请列表仍按一条申请计算。收到旧通知不能让失效待办重新出现。
+
+GET 不写审批日志、不改变通知已读状态或申请版本。审批/撤回仍须重新读取详情并提交最新 version、实际 taskId，由既有动作接口再次鉴权和校验，不可仅根据列表中的旧状态直接认定成功。
+
+代码入口：src/lib/travel-lists.ts 定义两个严格 schema、输入和摘要类型；src/server/travel-list-handlers.ts 处理查询参数与 HTTP 边界；src/server/travel-lists.ts 的 listTravelApplications(token, input)、listTravelTasks(token, input) 各自开启事务并验证身份，直接服务调用前须解析相应 schema。007 仅补查询索引，见 DATABASE.md。测试见 tests/travel-lists.test.ts 与生产 HTTP 脚本；本轮未接入列表/审批 UI。
 
 ## 错误和接入文件
 

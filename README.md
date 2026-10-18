@@ -1,7 +1,7 @@
 # 企业审批系统 · B/S 课程作业
 
 依据本地外层目录中的作业要求与设计文档分阶段开发。两份 PDF 是隐私资料，不随仓库发布；本地路径为 `../Assignment.pdf` 与 `../Design.pdf`。
-已完成：**S0 仓库与需求基线、S1 工程骨架、S2 用户与组织（数据库、身份接口、Web 页面及公共外观对齐）**。**S3a–S3f 差旅审批后端、本人通知/附件后端与差旅草稿 Web 页面**也已完成；下一步 S3g 差旅全状态及待办/已办列表后端，具体检查点见 [当前进度](docs/STATUS.md)。三类审批闭环、自定义流程与最终 Docker 部署尚未完成。
+已完成：**S0 仓库与需求基线、S1 工程骨架、S2 用户与组织（数据库、身份接口、Web 页面及公共外观对齐）**。**S3a–S3g 差旅审批、通知/附件及申请/任务列表后端与差旅草稿 Web 页面**也已完成；下一步 S3h 接入差旅申请/待办/已办列表和审批/撤回页面，具体检查点见 [当前进度](docs/STATUS.md)。三类审批闭环、自定义流程与最终 Docker 部署尚未完成。
 
 独立远程：[Fufu142857/approval-management-system](https://github.com/Fufu142857/approval-management-system)。
 
@@ -31,7 +31,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-先按 DATABASE.md 启动并初始化数据库，再访问 http://localhost:3000；地址必须与 APP_ORIGIN 一致。首页进入登录或个人信息；管理员可访问用户管理和审计页面。左侧“我的申请”已接入本人差旅草稿列表、新建/编辑、附件、提交与提交后只读详情；审批/撤回操作仍仅有 HTTP API，待办/已办和已提交申请列表尚未接入；通知已有本人列表/详情/未读数/已读 API，尚无通知页面和前台轮询。提交需本部门恰有一名有效负责人、全组织恰有一名有效财务审批人，且均不能是申请人，详情见 API.md。新增迁移通过 `pnpm db:migrate` 应用，不需要重置或重新初始化数据库。`GET /api/health` 仍只检查 Web 进程存活。
+先按 DATABASE.md 启动并初始化数据库，再访问 http://localhost:3000；地址必须与 APP_ORIGIN 一致。首页进入登录或个人信息；管理员可访问用户管理和审计页面。左侧“我的申请”已接入本人差旅草稿列表、新建/编辑、附件、提交与提交后只读详情；审批/撤回操作仍仅有 HTTP API，待办/已办和全状态申请列表已有 API，页面尚未接入；通知已有本人列表/详情/未读数/已读 API，尚无通知页面和前台轮询。提交需本部门恰有一名有效负责人、全组织恰有一名有效财务审批人，且均不能是申请人，详情见 API.md。新增迁移通过 `pnpm db:migrate` 应用，不需要重置或重新初始化数据库。`GET /api/health` 仍只检查 Web 进程存活。
 
 S3e 附件 API 已由 S3f 差旅页面接入，图片与 PDF 可预览、下载。PDF.js worker/字体等公开库资源由 dev/build 自动生成在忽略的 public/vendor/pdfjs 中，不依赖 CDN；Node 至少 22.13，建议 24 LTS。默认存储于忽略的 `uploads/attachments/`，可用 ATTACHMENT_STORAGE_DIR 指定私有目录（禁止 public）；迁移机器必须配对备份/恢复数据库与附件文件。`pnpm attachments:gc` 只回收当前数据库未引用的附件对象，运行前确认数据库与目录属于同一环境；详情见 DATABASE.md。
 
