@@ -1,6 +1,6 @@
 # 代码风格与公共接口约定
 
-这些是实现约定；已有身份 API 见 docs/API.md，页面接入见 docs/WEB_IDENTITY.md，人工模块边界见 docs/HUMAN_HANDOFF.md。固定差旅草稿、提交、通过/驳回/撤回与详情 API 已实现；本人通知列表/详情/未读数/已读 API 也已实现，受控差旅附件 API 也已实现；业务、附件及通知 UI 尚未实现。
+这些是实现约定；已有身份 API 见 docs/API.md，页面接入见 docs/WEB_IDENTITY.md，人工模块边界见 docs/HUMAN_HANDOFF.md。固定差旅草稿、提交、通过/驳回/撤回与详情 API 已实现；本人通知列表/详情/未读数/已读 API 也已实现，受控差旅附件 API 也已实现；差旅草稿、附件、提交与只读详情页面已接入，审批/撤回和通知 UI 尚未实现。固定差旅页面边界见 WEB_TRAVEL.md。
 
 ## 工程与命名
 

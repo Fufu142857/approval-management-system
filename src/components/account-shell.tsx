@@ -64,14 +64,25 @@ export function AccountShell({
     { label: "通知中心", icon: "bell" },
   ];
   const management = pathname.startsWith("/admin/");
-  const title =
-    pathname === "/admin/users"
+  const travel = pathname.startsWith("/travel/");
+  const title = travel
+    ? pathname === "/travel/drafts"
+      ? "我的申请"
+      : pathname.startsWith("/travel/applications/")
+        ? "差旅申请详情"
+        : "差旅申请"
+    : pathname === "/admin/users"
       ? "用户管理"
       : pathname === "/admin/audit"
         ? "操作审计"
         : "个人信息";
-  const subtitle =
-    pathname === "/admin/users"
+  const subtitle = travel
+    ? pathname === "/travel/drafts"
+      ? "管理差旅草稿，继续填写并提交申请"
+      : pathname.startsWith("/travel/applications/")
+        ? "查看申请内容、审批进度与历史记录"
+        : "填写差旅信息，提交后进入审批流程"
+    : pathname === "/admin/users"
       ? "维护用户的部门归属与角色权限"
       : pathname === "/admin/audit"
         ? "查看授权与配置变更记录"
@@ -88,17 +99,30 @@ export function AccountShell({
             <span>审批管理系统</span>
           </Link>
           <nav aria-label="主导航">
-            {futureLinks.map((link) => (
-              <span
-                key={link.label}
-                className="nav-item"
-                aria-disabled="true"
-                title={`${link.label}尚未开放`}
-              >
-                <Icon name={link.icon} />
-                {link.label}
-              </span>
-            ))}
+            {futureLinks.map((link) =>
+              link.label === "我的申请" && user.status === "active" ? (
+                <Link
+                  key={link.label}
+                  className="nav-item"
+                  href="/travel/drafts"
+                  prefetch={false}
+                  aria-current={travel ? "page" : undefined}
+                >
+                  <Icon name={link.icon} />
+                  {link.label}
+                </Link>
+              ) : (
+                <span
+                  key={link.label}
+                  className="nav-item"
+                  aria-disabled="true"
+                  title={`${link.label}尚未开放`}
+                >
+                  <Icon name={link.icon} />
+                  {link.label}
+                </span>
+              ),
+            )}
             {admin && (
               <div className="nav-divider">
                 <Link

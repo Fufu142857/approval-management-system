@@ -2,6 +2,8 @@ export class RequestError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string,
+    public fieldErrors?: Record<string, string[]>,
   ) {
     super(message);
   }
@@ -13,7 +15,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init,
       credentials: "same-origin",
       cache: "no-store",
-      headers: { "Content-Type": "application/json", ...init.headers },
+      headers: {
+        ...(init.body instanceof FormData
+          ? {}
+          : { "Content-Type": "application/json" }),
+        ...init.headers,
+      },
       signal: init.signal ?? AbortSignal.timeout(15000),
     });
   } catch {
@@ -24,6 +31,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new RequestError(
       response.status,
       result?.error?.message ?? "请求失败，请稍后重试。",
+      result?.error?.code,
+      result?.error?.fieldErrors,
     );
   if (!result || !("data" in result))
     throw new RequestError(500, "服务响应异常，请稍后重试。");
@@ -38,7 +47,11 @@ export function handleSessionError(error: unknown) {
     return true;
   }
   if (error instanceof RequestError && error.status === 403) {
-    window.location.replace("/account?denied=1");
+    window.location.replace(
+      ["ACCOUNT_NOT_ACTIVE", "DEPARTMENT_INACTIVE"].includes(error.code ?? "")
+        ? "/account?businessDenied=1"
+        : "/account?denied=1",
+    );
     return true;
   }
   return false;

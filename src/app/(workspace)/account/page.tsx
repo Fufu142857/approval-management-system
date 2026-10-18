@@ -7,7 +7,7 @@ import { RefreshAccount } from "@/components/account-shell";
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ denied?: string }>;
+  searchParams: Promise<{ denied?: string; businessDenied?: string }>;
 }) {
   const user = await requirePageUser();
   const departments = await listDepartments();
@@ -23,6 +23,11 @@ export default async function AccountPage({
       </header>
       {(await searchParams).denied === "1" && (
         <Notice error>你没有管理权限，请联系组织管理员。</Notice>
+      )}
+      {(await searchParams).businessDenied === "1" && (
+        <Notice error>
+          账号或所属部门尚不可用，请联系管理员确认后再办理申请。
+        </Notice>
       )}
       {user.status === "pending" && (
         <Notice>

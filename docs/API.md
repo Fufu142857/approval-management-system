@@ -1,6 +1,6 @@
 # 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；尚无差旅页面或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），尚无审批页面或自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
@@ -190,7 +190,7 @@ Attachment：`id, appId, uploaderId, originalName, mimeType, sizeBytes, sha256, 
 - 图片使用 sharp 真实解码，最多 4000 万像素；PDF 使用 pdf-lib 校验可解析结构、尾标记和至少一页，拒绝加密/不可解析文件。保留原字节，不做病毒扫描、内容净化或格式转换。4000 万像素是服务端解析保护，不是新增课程功能。
 - 上传和删除附件成功都使**申请 version 加 1**。表单保存、提交、删除草稿必须使用最新版本；409 VERSION_CONFLICT 时重新读取草稿与附件列表，不盲目覆盖。上传前先验证身份与草稿权限，写事务再检查一次；客户端不可指定上传者、申请人、大小、摘要或存储位置。
 - 删除草稿同时事务删除附件元数据，再回收原文件；删除失败保留文件。提交前校验所有附件文件存在、大小和 SHA-256 匹配；缺失/损坏返回 409 ATTACHMENT_UNAVAILABLE，申请维持 draft。草稿用户可删去失效附件后重新上传；已提交附件只能由运维恢复对应原件，不能用不同内容替换。
-- 内容接口每次鉴权并校验文件摘要，返回实际 Content-Type、Content-Length、UTF-8 Content-Disposition（保留中文原名）、Cache-Control: no-store、X-Content-Type-Options: nosniff、CSP sandbox 与 Referrer-Policy: no-referrer。inline 仅提供浏览器预览响应；尚无前端预览 UI，不承诺每种浏览器的 PDF 插件表现。当前整件返回，不支持 Range 分片。
+- 内容接口每次鉴权并校验文件摘要，返回实际 Content-Type、Content-Length、UTF-8 Content-Disposition（保留中文原名）、Cache-Control: no-store、X-Content-Type-Options: nosniff、CSP sandbox 与 Referrer-Policy: no-referrer。inline 仅提供浏览器预览响应；S3f 前端图片/PDF 先鉴权读取原件再本地预览；PDF 使用 PDF.js canvas，不依赖浏览器原生插件，见 WEB_TRAVEL.md。当前整件返回，不支持 Range 分片。
 - Cookie 上传/删除继续要求同源 Origin；Bearer 沿用既有来源规则。Web 构造 FormData 时不要手动写 Content-Type，让浏览器生成 boundary。小程序接入仍待 S6。
 
 新增错误：400 EMPTY_ATTACHMENT / INVALID_MULTIPART；413 ATTACHMENT_TOO_LARGE / ATTACHMENT_QUOTA_EXCEEDED / PAYLOAD_TOO_LARGE；415 UNSUPPORTED_ATTACHMENT / ATTACHMENT_TYPE_MISMATCH / INVALID_ATTACHMENT / UNSUPPORTED_MEDIA_TYPE；409 ATTACHMENT_UNAVAILABLE。文件名/UUID/版本校验沿用 400 VALIDATION_ERROR；存储或数据库内部错误返回 500 INTERNAL_ERROR，不泄露物理路径。私有目录、事务补偿与 `attachments:gc` 见 DATABASE.md。
