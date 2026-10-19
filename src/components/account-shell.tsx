@@ -5,6 +5,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { UserIdentity } from "@/lib/identity";
 import { api, errorMessage, RequestError } from "@/lib/api-client";
 import { Notice } from "./ui";
+import { useForegroundResource } from "./use-foreground-resource";
+import { NotificationContext } from "./notification-context";
 import { Icon, type IconName } from "./icons";
 
 export function RefreshAccount() {
@@ -56,6 +58,15 @@ export function AccountShell({
       setBusy(false);
     }
   }
+  const notificationsEnabled =
+    user.status === "active" && !!user.departmentId && !busy;
+  const unread = useForegroundResource<{ unreadCount: number }>(
+    "/notifications/unread-count",
+    notificationsEnabled,
+    false,
+  );
+  const notifications =
+    pathname === "/notifications" || pathname.startsWith("/notifications/");
   const admin = user.status === "active" && user.roles.includes("system_admin");
   const futureLinks: { label: string; icon: IconName }[] = [
     { label: "工作台", icon: "home" },
@@ -66,34 +77,42 @@ export function AccountShell({
   const management = pathname.startsWith("/admin/");
   const travel = pathname.startsWith("/travel/");
   const taskList = pathname.startsWith("/travel/tasks");
-  const title = taskList
-    ? "我的待办"
-    : travel
-      ? ["/travel/drafts", "/travel/applications"].includes(pathname)
-        ? "我的申请"
-        : pathname.startsWith("/travel/applications/")
-          ? "差旅申请详情"
-          : "差旅申请"
-      : pathname === "/admin/users"
-        ? "用户管理"
-        : pathname === "/admin/audit"
-          ? "操作审计"
-          : "个人信息";
-  const subtitle = taskList
-    ? "处理当前审批任务，查看已办记录"
-    : travel
-      ? ["/travel/drafts", "/travel/applications"].includes(pathname)
-        ? "查询本人申请，管理草稿与审批进度"
-        : pathname.startsWith("/travel/applications/")
-          ? "查看申请内容、审批进度与历史记录"
-          : "填写差旅信息，提交后进入审批流程"
-      : pathname === "/admin/users"
-        ? "维护用户的部门归属与角色权限"
-        : pathname === "/admin/audit"
-          ? "查看授权与配置变更记录"
-          : "查看个人资料、部门与角色权限";
+  const title = notifications
+    ? pathname === "/notifications"
+      ? "通知中心"
+      : "通知详情"
+    : taskList
+      ? "我的待办"
+      : travel
+        ? ["/travel/drafts", "/travel/applications"].includes(pathname)
+          ? "我的申请"
+          : pathname.startsWith("/travel/applications/")
+            ? "差旅申请详情"
+            : "差旅申请"
+        : pathname === "/admin/users"
+          ? "用户管理"
+          : pathname === "/admin/audit"
+            ? "操作审计"
+            : "个人信息";
+  const subtitle = notifications
+    ? "查看待办与审批结果，管理阅读状态"
+    : taskList
+      ? "处理当前审批任务，查看已办记录"
+      : travel
+        ? ["/travel/drafts", "/travel/applications"].includes(pathname)
+          ? "查询本人申请，管理草稿与审批进度"
+          : pathname.startsWith("/travel/applications/")
+            ? "查看申请内容、审批进度与历史记录"
+            : "填写差旅信息，提交后进入审批流程"
+        : pathname === "/admin/users"
+          ? "维护用户的部门归属与角色权限"
+          : pathname === "/admin/audit"
+            ? "查看授权与配置变更记录"
+            : "查看个人资料、部门与角色权限";
   return (
-    <>
+    <NotificationContext
+      value={{ enabled: notificationsEnabled, refreshCount: unread.refresh }}
+    >
       <a href="#main" className="skip-link">
         跳到主要内容
       </a>
@@ -105,7 +124,7 @@ export function AccountShell({
           </Link>
           <nav aria-label="主导航">
             {futureLinks.map((link) =>
-              ["我的申请", "我的待办"].includes(link.label) &&
+              ["我的申请", "我的待办", "通知中心"].includes(link.label) &&
               user.status === "active" ? (
                 <Link
                   key={link.label}
@@ -113,17 +132,38 @@ export function AccountShell({
                   href={
                     link.label === "我的申请"
                       ? "/travel/applications"
-                      : "/travel/tasks"
+                      : link.label === "我的待办"
+                        ? "/travel/tasks"
+                        : "/notifications"
                   }
                   prefetch={false}
                   aria-current={
-                    (link.label === "我的待办" ? taskList : travel && !taskList)
+                    (
+                      link.label === "通知中心"
+                        ? notifications
+                        : link.label === "我的待办"
+                          ? taskList
+                          : travel && !taskList
+                    )
                       ? "page"
                       : undefined
                   }
                 >
                   <Icon name={link.icon} />
                   {link.label}
+                  {link.label === "通知中心" && (
+                    <span
+                      className="notification-count"
+                      aria-label={
+                        unread.error
+                          ? "未读数暂不可用"
+                          : `未读通知 ${unread.data?.unreadCount ?? "加载中"}`
+                      }
+                      title={unread.error ?? "本人全部未读通知"}
+                    >
+                      {unread.error ? "—" : (unread.data?.unreadCount ?? "…")}
+                    </span>
+                  )}
                 </Link>
               ) : (
                 <span
@@ -215,6 +255,6 @@ export function AccountShell({
           {children}
         </main>
       </div>
-    </>
+    </NotificationContext>
   );
 }

@@ -1,6 +1,6 @@
 # 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；S3h 已接入这些列表及审批/撤回页面（见 WEB_TRAVEL_APPROVAL.md），尚无自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；S3h 已接入这些列表及审批/撤回页面（见 WEB_TRAVEL_APPROVAL.md）；S3i 已接入通知页面与前台轮询（见 WEB_NOTIFICATIONS.md），尚无自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
@@ -118,7 +118,7 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 - tasks：按 seqNo 升序，id/seqNo/name/approverId/status/createdAt/activatedAt/finishedAt；后两项未发生时为 null。
 - logs：按 createdAt/id 升序，id/taskId/actorId/action/opinion/result/applicationVersion/createdAt；提交记录 taskId=null、action=submitted、opinion=""、result=pending。
 
-所有 HTTP 时间点为 ISO 8601。通知按 recipient_id/event_key 唯一，事件键为 `task:<任务UUID>:pending`。**S3d 已提供通知列表/详情/未读数/已读 API，轮询和跳转界面尚未实现**；待办/已办列表由 S3g 提供（见后文），审批动作见下节，不把数据库枚举当作功能已完成。
+所有 HTTP 时间点为 ISO 8601。通知按 recipient_id/event_key 唯一，事件键为 `task:<任务UUID>:pending`。**S3d 已提供通知列表/详情/未读数/已读 API，S3i 已接入通知页面、前台轮询和详情跳转**；待办/已办列表由 S3g 提供（见后文），审批动作见下节，不把数据库枚举当作功能已完成。
 
 ## S3c 固定差旅审批与撤回
 
@@ -148,7 +148,7 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 | 全部通过/驳回 | 申请人                                   | `application:<申请UUID>:<新版本>:approved或rejected` |
 | 撤回          | 申请人及曾激活任务的实际审批人，按人去重 | `application:<申请UUID>:<新版本>:withdrawn`          |
 
-旧待办通知作为历史保留，是否还能操作以当前任务状态为准；不会因通知存在放宽权限。未激活即取消的未来人员不接收撤回通知，也不能读取正文。通知读取/未读数/已读接口见 S3d；业务 UI 和前台轮询留待后续。
+旧待办通知作为历史保留，是否还能操作以当前任务状态为准；不会因通知存在放宽权限。未激活即取消的未来人员不接收撤回通知，也不能读取正文。通知读取/未读数/已读接口见 S3d；S3h/S3i 已接入审批与通知 UI、前台轮询。
 
 ## S3d 本人站内通知
 
@@ -165,12 +165,12 @@ TravelDraft 额外返回：`id, appNo, applicantId, departmentId, type: "travel"
 
 NotificationItem 包含 `id, appId, kind, title, createdAt, readAt, target, task`。kind 为 approval.pending/application.approved/application.rejected/application.withdrawn；title 保留事件生成时标题，createdAt/readAt 为 ISO 8601（未读 readAt=null），不返回接收人资料或内部事件键。
 
-- target：当前有正文访问权时为 `{ type: "travel", id, status, apiPath: "/api/travel-applications/<UUID>" }`；无权访问或无支持的已提交业务时为 null。apiPath 是已存在的鉴权 API，不是尚未实现的页面地址。真正读取正文仍由该 API 重新鉴权。
+- target：当前有正文访问权时为 `{ type: "travel", id, status, apiPath: "/api/travel-applications/<UUID>" }`；无权访问或无支持的已提交业务时为 null。apiPath 是鉴权 API 地址；S3i 通过 target.type/id 映射到既有差旅页面。真正读取正文仍由该 API 重新鉴权。
 - task：仅原 approval.pending 通知能匹配到本人的原任务且有正文权限时，返回 `{ id, status }`，否则 null。它始终描述这条通知原本对应的任务，不自动替换为下一任务。
-- 通知 kind/title 是历史事件；target.status 和 task.status 是本次查询的当前状态。撤回后旧待办通知仍存在，可能同时返回 withdrawn/cancelled；已办任务返回 approved/rejected，不能凭通知标题继续审批。客户端将来进入详情后必须刷新最新版本和任务，再决定可用操作。
+- 通知 kind/title 是历史事件；target.status 和 task.status 是本次查询的当前状态。撤回后旧待办通知仍存在，可能同时返回 withdrawn/cancelled；已办任务返回 approved/rejected，不能凭通知标题继续审批。客户端进入详情后必须刷新最新版本和任务，再决定可用操作。
 - 拥有通知只允许读该事件，不会自动获得正文权；target/task 为 null 时也可以标记该通知已读。既有 S3c 历史权限仍适用，未激活节点没有正文权，管理员权限不自动增加正文权。
 
-标记已读由数据库设置时间，不接受客户端时间。首次成功后重试和并发调用都返回相同首次 readAt，不重复生成事件、不影响审批/日志/申请状态；每次仍校验会话与通知所有权。未读数在之后的 GET 中查询。本轮不提供全部已读、删除、恢复未读、通知创建接口，也没有前台轮询/后台推送或页面跳转实现。
+标记已读由数据库设置时间，不接受客户端时间。首次成功后重试和并发调用都返回相同首次 readAt，不重复生成事件、不影响审批/日志/申请状态；每次仍校验会话与通知所有权。未读数在之后的 GET 中查询。没有全部已读、删除、恢复未读或通知创建接口。S3i 已接入列表/详情、显式已读与申请页面跳转，Web 可见页面每 30 秒轮询；后台推送未实现。HTTP 契约保持不变，前端生命周期与限制见 WEB_NOTIFICATIONS.md。
 
 ## S3e 受控差旅附件
 
