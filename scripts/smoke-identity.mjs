@@ -1073,10 +1073,281 @@ try {
   ).body.data.items.find((item) => item.appId === submittedPurchaseId);
   assert.equal(purchaseNotice.target.apiPath, `/api/${purchaseDetailPath}`);
   assert.equal(purchaseNotice.target.type, "purchase");
+  // S4d exercises all procurement terminals without replacing the S4c pending fixture.
+  const purchaseTerminals = [];
+  for (const outcome of [
+    "approved",
+    "reject-first",
+    "reject-last",
+    "withdraw-first",
+    "withdraw-last",
+  ]) {
+    const created = await call(
+      "purchase-drafts",
+      "POST",
+      {
+        title: `采购审批 HTTP ${outcome}`,
+        reason: "设备更新",
+        expectedDate: "2028-02-29",
+        budgetLimit: "1000",
+        selectionReason: "独家适配",
+        singleSource: true,
+        singleSourceReason: "独家授权",
+        items: [
+          {
+            name: "设备",
+            specification: "标准型",
+            quantity: "2",
+            unit: "件",
+            unitPrice: "100",
+          },
+        ],
+        quotes: [
+          {
+            supplierName: "授权供应商",
+            quoteDate: "2028-02-01",
+            amount: "200",
+            basis: "询价记录",
+            selected: true,
+            isOnline: true,
+            purchaseUrl: "https://example.invalid/item",
+          },
+        ],
+      },
+      token,
+    );
+    assert.equal(created.response.status, 201);
+    const saved = created.body.data;
+    const evidence = new FormData();
+    evidence.set(
+      "file",
+      new File([png], "报价截图.png", { type: "image/png" }),
+    );
+    evidence.set("version", "1");
+    const upload = await fetch(
+      `${origin}/api/purchase-drafts/${saved.id}/quotes/${saved.quotes[0].id}/attachments`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: evidence,
+      },
+    );
+    assert.equal(upload.status, 201);
+    const file = (await upload.json()).data.attachment;
+    const started = await call(
+      `purchase-drafts/${saved.id}/submit`,
+      "POST",
+      { version: 2 },
+      token,
+    );
+    assert.equal(started.response.status, 200);
+    const initial = started.body.data;
+    let current = initial;
+    const path = `purchase-applications/${saved.id}`;
+    const decision = (value, index, decision, actorToken, opinion = "") =>
+      call(
+        `${path}/tasks/${value.tasks[index].id}/decision`,
+        "POST",
+        { version: value.application.version, decision, opinion },
+        actorToken,
+      );
+    assert.equal(
+      (await decision(initial, 1, "approve", companyHead.token)).response
+        .status,
+      409,
+    );
+    assert.equal(
+      (await decision(initial, 0, "approve", token)).response.status,
+      403,
+    );
+    assert.equal(
+      (await decision(initial, 0, "approve", finance.token)).response.status,
+      404,
+    );
+    assert.equal(
+      (await decision(initial, 0, "reject", head.token, " ")).response.status,
+      400,
+    );
+    const activated = ["approved", "reject-last", "withdraw-last"].includes(
+      outcome,
+    );
+    if (activated) {
+      const first = await decision(
+        current,
+        0,
+        "approve",
+        head.token,
+        "同意采购",
+      );
+      assert.equal(first.response.status, 200);
+      current = first.body.data;
+      assert.deepEqual(
+        current.tasks.map((task) => task.status),
+        ["approved", "pending"],
+      );
+      assert.equal(
+        (await decision(initial, 0, "approve", head.token)).response.status,
+        409,
+      );
+    }
+    const result = outcome.startsWith("withdraw")
+      ? await call(
+          `${path}/withdraw`,
+          "POST",
+          { version: current.application.version, opinion: "计划调整" },
+          token,
+        )
+      : await decision(
+          current,
+          activated ? 1 : 0,
+          outcome === "approved" ? "approve" : "reject",
+          activated ? companyHead.token : head.token,
+          "核验后处理",
+        );
+    assert.equal(result.response.status, 200);
+    const terminal = result.body.data;
+    assert.equal(
+      terminal.application.status,
+      outcome === "approved"
+        ? "approved"
+        : outcome.startsWith("reject")
+          ? "rejected"
+          : "withdrawn",
+    );
+    assert.equal(terminal.application.version, activated ? 5 : 4);
+    assert.equal(terminal.logs.length, activated ? 3 : 2);
+    assert.deepEqual(terminal.workflow, initial.workflow);
+    assert.deepEqual(terminal.application.items, initial.application.items);
+    assert.deepEqual(terminal.application.quotes, initial.application.quotes);
+    assert.equal(
+      terminal.tasks.some(
+        (task) => task.status === "pending" || task.status === "blocked",
+      ),
+      false,
+    );
+    assert.equal(
+      (
+        await call(
+          `${path}/withdraw`,
+          "POST",
+          { version: terminal.application.version },
+          token,
+        )
+      ).response.status,
+      409,
+    );
+    assert.equal(
+      (
+        await decision(
+          terminal,
+          activated ? 1 : 0,
+          "approve",
+          activated ? companyHead.token : head.token,
+        )
+      ).response.status,
+      409,
+    );
+    const attachmentState = (
+      await call(`${path}/attachments`, "GET", undefined, head.token)
+    ).body.data;
+    assert.deepEqual(attachmentState.items, [file]);
+    assert.equal(attachmentState.status, terminal.application.status);
+    for (const actor of [companyHead, finance]) {
+      const allowed = actor.id === companyHead.id && activated;
+      assert.equal(
+        (await call(path, "GET", undefined, actor.token)).response.status,
+        allowed ? 200 : 404,
+      );
+      const bytes = await fetch(
+        `${origin}/api/${path}/attachments/${file.id}/content`,
+        { headers: { Authorization: `Bearer ${actor.token}` } },
+      );
+      assert.equal(bytes.status, allowed ? 200 : 404);
+      if (allowed)
+        assert.deepEqual(Buffer.from(await bytes.arrayBuffer()), png);
+    }
+    const noticeState = [];
+    for (const actorToken of [token, head.token, companyHead.token]) {
+      const list = await call(
+        "notifications?pageSize=100",
+        "GET",
+        undefined,
+        actorToken,
+      );
+      assert.equal(list.response.status, 200);
+      const items = list.body.data.items.filter(
+        (item) => item.appId === saved.id,
+      );
+      for (const item of items) {
+        assert.equal(item.target.status, terminal.application.status);
+        if (item.task) assert.notEqual(item.task.status, "pending");
+      }
+      noticeState.push({ token: actorToken, items });
+    }
+    const finalKind = `application.${terminal.application.status}`;
+    assert.equal(
+      noticeState[0].items.filter((item) => item.kind === finalKind).length,
+      1,
+    );
+    if (outcome.startsWith("withdraw")) {
+      assert.equal(
+        noticeState[1].items.filter((item) => item.kind === finalKind).length,
+        1,
+      );
+      assert.equal(
+        noticeState[2].items.filter((item) => item.kind === finalKind).length,
+        activated ? 1 : 0,
+      );
+    }
+    purchaseTerminals.push({
+      path,
+      terminal,
+      attachmentState,
+      file,
+      activated,
+      noticeState,
+    });
+  }
   server.child.kill("SIGTERM");
   await server.closed;
   server = startServer();
   await ready();
+  for (const entry of purchaseTerminals) {
+    assert.deepEqual(
+      (await call(entry.path, "GET", undefined, token)).body.data,
+      entry.terminal,
+    );
+    assert.deepEqual(
+      (await call(`${entry.path}/attachments`, "GET", undefined, head.token))
+        .body.data,
+      entry.attachmentState,
+    );
+    const bytes = await fetch(
+      `${origin}/api/${entry.path}/attachments/${entry.file.id}/content`,
+      { headers: { Authorization: `Bearer ${head.token}` } },
+    );
+    assert.equal(bytes.status, 200);
+    assert.deepEqual(Buffer.from(await bytes.arrayBuffer()), png);
+    assert.equal(
+      (await call(entry.path, "GET", undefined, companyHead.token)).response
+        .status,
+      entry.activated ? 200 : 404,
+    );
+    for (const notice of entry.noticeState) {
+      const list = await call(
+        "notifications?pageSize=100",
+        "GET",
+        undefined,
+        notice.token,
+      );
+      assert.deepEqual(
+        list.body.data.items.filter(
+          (item) => item.appId === entry.terminal.application.id,
+        ),
+        notice.items,
+      );
+    }
+  }
   assert.deepEqual(
     (await call(purchaseDetailPath, "GET", undefined, head.token)).body.data,
     purchaseSnapshot,
@@ -1215,7 +1486,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

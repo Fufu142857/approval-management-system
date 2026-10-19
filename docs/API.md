@@ -334,7 +334,7 @@ PurchaseDraft 返回可编辑字段和 `id/appNo/applicantId/departmentId/type="
 
 ## S4b 固定采购报价附件
 
-本节接口只服务本人采购草稿；S4c 提交及提交后读取见下一节，审批动作和页面尚未实现。不能把已存在附件当作已满足线上截图或报价完整性校验。先创建草稿并保存报价取得 quoteId，再上传。附件必须属于一条报价，不接受无报价的采购附件。
+本节接口只服务本人采购草稿；S4c 提交及提交后读取见下一节，S4d 审批动作见后文，采购页面尚未实现。不能把已存在附件当作已满足线上截图或报价完整性校验。先创建草稿并保存报价取得 quoteId，再上传。附件必须属于一条报价，不接受无报价的采购附件。
 
 | 方法与路径                                                     | 输入                                                                    | 成功 data / 内容                                                             |
 | -------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -391,4 +391,33 @@ tasks 按 seqNo 排序，包含 id/seqNo/name/approverId/status/createdAt/activa
 
 通知继续使用既有本人通知接口，采购待办事件 target.type=purchase，apiPath=/api/purchase-applications/:id，task 为当前实际任务状态；目标仍独立按正文权限校验。现有通知页面可显示事件和状态，但只为已接入的差旅类型展示页面链接，采购页面跳转留待后续，不将 API 地址当页面地址。
 
-实现入口：purchase-submission.ts 的 submitPurchaseDraft(token, id, version) / getPurchaseApplication(token, id) 自行开事务；参数类型分别 string | undefined、string、number。purchase-attachments.ts 新增 listSubmittedPurchaseAttachments(token, id) / getSubmittedPurchaseAttachmentContent(token, id, attachmentId)，自行开事务。直接调用前校验 UUID/version。purchase-access.ts 的 lockSubmittedPurchase(client, id, actorId) 只可用于已完成 requireBusinessActor 的事务；readPurchaseDetail(client, id) 不自行鉴权，调用方必须先授权并持申请锁。PurchaseRecord 位于 src/lib/purchase.ts；固定提交校验位于 purchase-submission-validation.ts。本阶段没有采购审批/撤回、重提、列表或 Web 页面接口，不包含自定义模板解释。
+实现入口：purchase-submission.ts 的 submitPurchaseDraft(token, id, version) / getPurchaseApplication(token, id) 自行开事务；参数类型分别 string | undefined、string、number。purchase-attachments.ts 新增 listSubmittedPurchaseAttachments(token, id) / getSubmittedPurchaseAttachmentContent(token, id, attachmentId)，自行开事务。直接调用前校验 UUID/version。purchase-access.ts 的 lockSubmittedPurchase(client, id, actorId) 只可用于已完成 requireBusinessActor 的事务；readPurchaseDetail(client, id) 不自行鉴权，调用方必须先授权并持申请锁。PurchaseRecord 位于 src/lib/purchase.ts；固定提交校验位于 purchase-submission-validation.ts。S4d 已补采购审批/撤回（见下节）；采购重提、列表或 Web 页面尚未实现，不包含自定义模板解释。
+
+## S4d 固定采购通过、驳回与撤回
+
+| 方法与路径                                                 | 严格 JSON 输入                                           | 成功 data                                          |
+| ---------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------- |
+| POST /api/purchase-applications/:id/tasks/:taskId/decision | `{ version, decision: "approve" 或 "reject", opinion? }` | 200，最新 `{ application, workflow, tasks, logs }` |
+| POST /api/purchase-applications/:id/withdraw               | `{ version, opinion? }`                                  | 200，同上                                          |
+
+id/taskId 为 UUID，version 为最新正整数；opinion trim 后最多 2000 字符，缺省为空。reject 时意见必填且不能全空白，通过/撤回意见可空。拒绝其他 JSON 字段和所有查询参数（包括重复参数），JSON 正文上限 16 KiB，Origin/Cookie/Bearer 与公共身份协议一致。返回结构沿用 S4c，文件通过现有受控附件接口另读。没有同名 GET、任意节点跳转、指定新审批人或管理员代审入口。
+
+权限及状态规则：
+
+- 只有本申请当前 pending 任务的实际人员可审批，任务 ID 必须属于同一实例及本人，所有前置任务必须 approved。不以当前角色代替实际任务归属；未来 blocked 节点、已办任务、他人任务不能操作。申请人本人禁止审批，管理员/财务/新任同角色人员无额外权力。采购和差旅动作按 type 隔离。
+- 仅本人 pending 申请可撤回，可在部门或企业节点执行；取消全部 pending/blocked 任务，保留已办任务及原历史，不回到 draft。
+- 部门通过后关闭本任务、激活原快照企业负责人任务，申请仍 pending；企业负责人通过后申请 approved。任一步驳回则申请 rejected、取消后续未办节点，不再推进。所有成功动作仅递增一次申请 version，更新 updatedAt；编号、提交时间、明细/报价、附件、人员快照保持不变。
+- 下一快照人员须 active 且当前所属部门有效，并不得为申请人；否则本次 approve 返回 409 APPROVER_UNAVAILABLE 且完整回滚，不跳步、不换成新任负责人。角色变更不影响已冻结任务归属；旧人员恢复有效账号后可继续。驳回/本人撤回不依赖下一人员是否可用。
+- approved/rejected/withdrawn 为终态，不能再次审批或撤回。采购复制重提尚未实现，不得调用差旅重提接口或改原记录为草稿。
+
+事务先 requireBusinessActor（组织/会话/有效部门锁），再锁 purchase 申请 FOR UPDATE，检查归属/状态/版本、读取冻结任务；同一事务修改任务/申请、追加日志与通知。先关闭当前任务再激活下一节点，保持同实例最多一个 pending。每条日志记录 taskId、实际 actorId、approved/rejected/withdrawn 动作、意见、结果状态和新 applicationVersion，时间由数据库产生；实例及历史日志不更新/删除。
+
+通知规则：部门通过通知下一实际企业负责人（approval.pending）；最终通过或驳回通知申请人（application.approved/rejected）；撤回通知本人及所有曾激活任务的实际人员，按人去重，不通知从未激活的未来节点。事件键与接收人的唯一约束防止重复。旧待办通知标题保持原事件，target.status/task.status 则返回最新状态，不可据旧通知重复审批。
+
+正文/附件历史权限仍按 S4c：有效申请人和曾激活过任务的实际人员可读，包括被撤回的当前节点；未激活即取消的节点没有权限。详情与附件持申请共享锁；并发读须等动作事务提交后重新检查授权，避免一半新状态一半旧日志或提前授权。提交后的附件与报价仍不可更改。
+
+错误：400 VALIDATION_ERROR（含驳回空理由/非法 ID/版本/字段/查询）、401 未登录/失效、403 账号/部门无效或 SELF_APPROVAL；404 NOT_FOUND 隐藏他人申请、陌生/跨单任务和跨类型资源；409 STATE_CHANGED（草稿/终态或状态异常）、VERSION_CONFLICT（旧版本）、VERSION_LIMIT（上限）、TASK_NOT_PENDING（不是当前有效任务）、APPROVER_UNAVAILABLE（下一人员不可用）。413 请求过大、415 非 JSON；未预期数据库异常为 500，事务全部回滚。不同授权/状态检查可能先返回其中之一，不保证所有错误同时报告。
+
+重复请求、相反审批、审批与撤回竞争只有一个合法版本变更成功；同人负责两步也必须使用第二步 taskId 和新 version。409 或不确定网络结果后先 GET 最新详情/通知核对，不能自动刷新版本重放 POST；历史来源不自动授予新申请权限。
+
+实现：src/lib/purchase-actions.ts 导出 purchaseDecisionSchema / purchaseWithdrawalSchema、PurchaseDecisionInput / PurchaseWithdrawalInput。src/server/purchase-actions.ts 导出 decidePurchaseTask(token: string | undefined, id: string, taskId: string, input: PurchaseDecisionInput) 与 withdrawPurchaseApplication(token, id, input: PurchaseWithdrawalInput)，各自开事务返回 S4c 详情。直接调用前需通过对应 schema 和 UUID 校验。HTTP 边界在 purchase-action-handlers.ts；只执行固定采购已冻结的任务，不解释自定义模板/字段/发布规则。无新迁移，现有 010 数据库可用。

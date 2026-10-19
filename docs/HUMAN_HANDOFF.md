@@ -1,6 +1,6 @@
 # 人工模块交接边界
 
-**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，S3f 已接入差旅草稿/附件/提交与只读详情页面；S3g 已完成固定差旅全状态及待办/已办列表后端；S3h 已接入列表与审批/撤回页面；S3i 已接入通知页面与前台轮询；S3j 已完成差旅复制重提；S4a 已完成固定采购数据模型与草稿后端；S4b 已实现采购报价附件；S4c 已完成固定采购提交与提交后详情，下一步 S4d 固定采购审批动作。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
+**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，S3f 已接入差旅草稿/附件/提交与只读详情页面；S3g 已完成固定差旅全状态及待办/已办列表后端；S3h 已接入列表与审批/撤回页面；S3i 已接入通知页面与前台轮询；S3j 已完成差旅复制重提；S4a 已完成固定采购数据模型与草稿后端；S4b 已实现采购报价附件；S4c 已完成固定采购提交与提交后详情，S4d 已完成固定采购审批动作，下一步 S4e 采购申请与任务列表。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
 
 ## 独立完成范围
 
@@ -84,7 +84,7 @@ S3j 新增 GET/POST /api/travel-applications/:id/resubmission。src/server/trave
 
 S4a 已有 POST/GET /api/purchase-drafts、GET/PUT/DELETE /api/purchase-drafts/:id。src/lib/purchase.ts 定义 purchaseDraftSchema、replacePurchaseDraftSchema、purchaseDraftListSchema 和 PurchaseDraftInput、ReplacePurchaseDraftInput、PurchaseDraft、PurchaseDraftSummary；金额/数量输入必须先通过 schema 规范化。src/server/purchase.ts 导出 createPurchaseDraft(token, input)、getPurchaseDraft(token, id)、listPurchaseDrafts(token, input)、replacePurchaseDraft(token, id, input)、deletePurchaseDraft(token, id, version)，token: string | undefined，id: UUID string，version: number；输入类型对应上列 schema，返回详情/分页摘要/删除结果。各自开事务，直接调用前验证 UUID 和 schema；HTTP 边界在 purchase-handlers.ts。
 
-009 新增 purchase_requests / purchase_items / supplier_quotes，应用类型扩展为 travel/purchase；默认 travel 不变。GET 详情持申请共享锁，写持排他锁，均在组织/身份/部门锁之后；稳定行 ID 仅能用于当前草稿同类行，PUT 完整替换，删除省略行。quantity 三位、unitPrice 两位小数，行金额 half-up 到分后精确求和，未完整填写返回 null，不是零。新建/保存部门跟随当前有效身份。采购 POST/PUT 的 JSON 上限 256 KiB，其他仍 16 KiB。S4b 已接入采购报价附件及整单删除文件补偿，S4c 已实现采购提交/详情与提交后文件授权；审批动作/重提与 UI 尚未实现。详见 API.md/DATABASE.md。
+009 新增 purchase_requests / purchase_items / supplier_quotes，应用类型扩展为 travel/purchase；默认 travel 不变。GET 详情持申请共享锁，写持排他锁，均在组织/身份/部门锁之后；稳定行 ID 仅能用于当前草稿同类行，PUT 完整替换，删除省略行。quantity 三位、unitPrice 两位小数，行金额 half-up 到分后精确求和，未完整填写返回 null，不是零。新建/保存部门跟随当前有效身份。采购 POST/PUT 的 JSON 上限 256 KiB，其他仍 16 KiB。S4b 已接入采购报价附件及整单删除文件补偿，S4c 已实现采购提交/详情与提交后文件授权；S4d 已补审批动作，采购重提/列表与 UI 尚未实现。详见 API.md/DATABASE.md。
 
 S4b 的真实附件路径、参数和返回见 API.md。src/server/purchase-attachments.ts 导出 authorizePurchaseAttachmentUpload(token: string | undefined, id: string, quoteId: string)、uploadPurchaseAttachment(token, id, quoteId, version: number, bytes: Buffer, filename: string, declaredType: string)、listPurchaseAttachments(token, id)、deletePurchaseAttachment(token, id, attachmentId: string, version)、getPurchaseAttachmentContent(token, id, attachmentId)，均自行开事务，直接调用前需校验 UUID/version。返回类型 PurchaseAttachment（src/lib/purchase-attachments.ts）为 Attachment + quoteId；content 返回原 bytes 与不含存储键的元数据。
 
@@ -92,4 +92,8 @@ S4b 的真实附件路径、参数和返回见 API.md。src/server/purchase-atta
 
 S4c 新增 POST /api/purchase-drafts/:id/submit、GET /api/purchase-applications/:id 以及同前缀附件列表和 content。src/server/purchase-submission.ts 导出 submitPurchaseDraft(token: string | undefined, id: string, version: number) 与 getPurchaseApplication(token, id)，各自开事务返回 application/workflow/tasks/logs；src/server/purchase-attachments.ts 新增 listSubmittedPurchaseAttachments(token, id)、getSubmittedPurchaseAttachmentContent(token, id, attachmentId: string)，自行开事务。完整规则/响应见 API.md，PurchaseRecord 类型见 src/lib/purchase.ts。
 
-事务内 readPurchaseDetail(client: PoolClient, id: string) 不自行鉴权，须先锁申请并授权；lockSubmittedPurchase(client, id, actorId: string) 须先 requireBusinessActor，仅本人或已激活实际任务人员可通过。submittedPurchaseDetail(client, id, actorId) 组合授权及多表读取，不可在未认证事务中单独暴露。固定采购路径由用户确认“部门负责人 → 企业负责人”，fixed-purchase-v1；差旅仍是财务第二步。提交完整性函数只验证固定采购字段，不是未来人工模块的规则解析器。无新迁移，仍为 010；当前只有采购提交及读取，审批动作、重提、列表和页面仍待后续。
+事务内 readPurchaseDetail(client: PoolClient, id: string) 不自行鉴权，须先锁申请并授权；lockSubmittedPurchase(client, id, actorId: string) 须先 requireBusinessActor，仅本人或已激活实际任务人员可通过。submittedPurchaseDetail(client, id, actorId) 组合授权及多表读取，不可在未认证事务中单独暴露。固定采购路径由用户确认“部门负责人 → 企业负责人”，fixed-purchase-v1；差旅仍是财务第二步。提交完整性函数只验证固定采购字段，不是未来人工模块的规则解析器。无新迁移，仍为 010；S4d 已补采购审批动作，重提、列表和页面仍待后续。
+
+S4d 已有 POST /api/purchase-applications/:id/tasks/:taskId/decision 与 POST /api/purchase-applications/:id/withdraw。类型/严格输入在 src/lib/purchase-actions.ts（purchaseDecisionSchema、purchaseWithdrawalSchema、PurchaseDecisionInput、PurchaseWithdrawalInput）；服务 src/server/purchase-actions.ts 导出 decidePurchaseTask(token: string | undefined, id: string, taskId: string, input: PurchaseDecisionInput) 和 withdrawPurchaseApplication(token, id, input: PurchaseWithdrawalInput)，自行开事务返回 application/workflow/tasks/logs。调用服务前校验 UUID 和 schema，HTTP 约束/错误/通知规则见 API.md。
+
+采购动作按原固定人员、taskId 和最新 version 执行，不从角色重新选人；申请行锁覆盖状态/任务/追加日志/通知。审批路径与业务明细/附件均不改写；下一人员不可用则批准回滚，可驳回或本人撤回。终态保持历史权限，未激活即取消的节点无权读取。无新迁移，数据库仍为 010。本阶段没有采购 UI、列表或复制重提，不构成人工自定义流程实现；S5 停止全项目代码修改的要求继续有效。
