@@ -1,6 +1,6 @@
 # 人工模块交接边界
 
-**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，S3f 已接入差旅草稿/附件/提交与只读详情页面；S3g 已完成固定差旅全状态及待办/已办列表后端；S3h 已接入列表与审批/撤回页面；S3i 已接入通知页面与前台轮询；S3j 已完成差旅复制重提；下一步 S4a 固定采购数据模型与草稿后端。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
+**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，S3f 已接入差旅草稿/附件/提交与只读详情页面；S3g 已完成固定差旅全状态及待办/已办列表后端；S3h 已接入列表与审批/撤回页面；S3i 已接入通知页面与前台轮询；S3j 已完成差旅复制重提；S4a 已完成固定采购数据模型与草稿后端；下一步 S4b 固定采购报价附件后端。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
 
 ## 独立完成范围
 
@@ -22,7 +22,7 @@ S2c 页面已接入现有身份服务，页面路由、前端组件、错误/会
 
 S3a 已有固定差旅草稿：`POST/GET /api/travel-drafts` 和 `GET/PUT/DELETE /api/travel-drafts/:id`。真实 schema/类型在 `src/lib/travel.ts`，事务服务在 `src/server/travel.ts`，完整契约见 API.md。仅本人 active 账号及有效部门可访问；PUT 完整替换且需要 version，DELETE 也需 version；两表事务、先组织共享锁再会话/申请锁。编号创建时分配，日期为日历日期、自然日含首尾，金额传精确字符串。
 
-002 迁移建立 applications / travel_requests；目前仅允许固定 travel 类型，不包含动态字段、流程模板、版本发布或规则解析。草稿的公共主表不是自定义模块已经可接入的承诺，后续 S3–S4 仍需补齐固定业务能力。
+002 迁移建立 applications / travel_requests；009 已扩展为固定 travel/purchase 类型，不包含动态字段、流程模板、版本发布或规则解析。草稿的公共主表不是自定义模块已经可接入的承诺，后续 S3–S4 仍需补齐固定业务能力。
 
 S3b 已有 `POST /api/travel-drafts/:id/submit`（只收 version）和 `GET /api/travel-applications/:id`。服务在 `src/server/travel-submission.ts`：`submitTravelDraft(token: string | undefined, id: string, version: number)` 与 `getTravelApplication(token: string | undefined, id: string)`，返回 application/workflow/tasks/logs。服务自行开事务，HTTP 参数校验和权限契约见 API.md；固定 v1 的两步选择只适用于差旅，不是通用配置解析器。
 
@@ -81,3 +81,7 @@ S3i 页面见 WEB_NOTIFICATIONS.md。notification-panels.tsx 复用 S3d 通知 A
 S3j 新增 GET/POST /api/travel-applications/:id/resubmission。src/server/travel-resubmission.ts 导出 getTravelResubmission(token: string | undefined, id: string): Promise<TravelResubmission> 与 copyTravelForResubmission(token: string | undefined, id: string, version: number): Promise<TravelResubmissionResult>；类型在 src/lib/travel-resubmission.ts。服务自行开事务；直接调用前校验 UUID/version。GET 返回 sourceId/successor（可空），POST 返回 sourceId/successor/created；HTTP 新建 201、复用 200。只有本人 rejected/withdrawn 可调用，POST 先核原版本再复用。
 
 008 为 applications 增加不可变 resubmission_of 自外键与唯一约束；TravelDraft/TravelApplication 的 resubmissionOf 为 string | null。锁顺序为组织/身份/部门 → 原申请 → 已有后续；不改旧申请/审批记录，不复制附件/任务/日志/通知，新草稿使用当前部门，提交重新校验。删除未提交后续允许重建；已提交后续不能覆盖，再次重提从该后续继续。来源关联不授予额外正文权限。UI 在不确定写入后只 GET 核对，不自动重放 POST；详见 API.md、DATABASE.md 与 WEB_TRAVEL_RESUBMISSION.md。此服务仅支持固定差旅。
+
+S4a 已有 POST/GET /api/purchase-drafts、GET/PUT/DELETE /api/purchase-drafts/:id。src/lib/purchase.ts 定义 purchaseDraftSchema、replacePurchaseDraftSchema、purchaseDraftListSchema 和 PurchaseDraftInput、ReplacePurchaseDraftInput、PurchaseDraft、PurchaseDraftSummary；金额/数量输入必须先通过 schema 规范化。src/server/purchase.ts 导出 createPurchaseDraft(token, input)、getPurchaseDraft(token, id)、listPurchaseDrafts(token, input)、replacePurchaseDraft(token, id, input)、deletePurchaseDraft(token, id, version)，token: string | undefined，id: UUID string，version: number；输入类型对应上列 schema，返回详情/分页摘要/删除结果。各自开事务，直接调用前验证 UUID 和 schema；HTTP 边界在 purchase-handlers.ts。
+
+009 新增 purchase_requests / purchase_items / supplier_quotes，应用类型扩展为 travel/purchase；默认 travel 不变。GET 详情持申请共享锁，写持排他锁，均在组织/身份/部门锁之后；稳定行 ID 仅能用于当前草稿同类行，PUT 完整替换，删除省略行。quantity 三位、unitPrice 两位小数，行金额 half-up 到分后精确求和，未完整填写返回 null，不是零。新建/保存部门跟随当前有效身份。采购 POST/PUT 的 JSON 上限 256 KiB，其他仍 16 KiB。没有采购附件/提交/审批/重提与 UI；后续附件阶段必须扩展删除事务的文件锁、引用与补偿，不能把当前纯数据库删除当作完整附件删除。详见 API.md/DATABASE.md。

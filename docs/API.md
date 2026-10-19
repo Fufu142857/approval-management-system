@@ -1,10 +1,10 @@
 # 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；S3h 已接入这些列表及审批/撤回页面（见 WEB_TRAVEL_APPROVAL.md）；S3i 已接入通知页面与前台轮询（见 WEB_NOTIFICATIONS.md），S3j 新增固定差旅复制重提 GET/POST（见本文末节）；尚无自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；S3h 已接入这些列表及审批/撤回页面（见 WEB_TRAVEL_APPROVAL.md）；S3i 已接入通知页面与前台轮询（见 WEB_NOTIFICATIONS.md），S3j 新增固定差旅复制重提 GET/POST（见本文末节）；S4a 新增固定采购草稿 CRUD（见本文末节）；尚无自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
-- 请求正文使用 application/json，最大 16 KiB；字段以严格白名单验证，未知字段返回 400。登录使用用户名，暂不支持邮箱登录。
+- 请求正文使用 application/json，默认最大 16 KiB（采购草稿 POST/PUT 为 256 KiB）；字段以严格白名单验证，未知字段返回 400。登录使用用户名，暂不支持邮箱登录。
 - Web 登录默认 `client: "web"`，令牌只写入 `approval_session` Cookie，HttpOnly、SameSite=Lax、Path=/、固定有效期 8 小时。HTTPS 部署必须设置 `SESSION_COOKIE_SECURE=true`；本地 HTTP 为 false。页面不要把会话存入 localStorage。
 - 小程序登录指定 `client: "mobile"`，JSON 返回 token；后续显式发送 `Authorization: Bearer <token>`。本轮仅提供协议，小程序界面尚未实现。数据库只保存令牌 SHA-256 摘要。
 - 写请求若有 Origin，必须等于 `.env` 的 APP_ORIGIN，禁止跨站 Sec-Fetch-Site。Cookie 认证写请求必须带同源 Origin；原生 Bearer 请求可不带 Origin。注册/登录允许无 Origin 的原生 JSON 请求。本服务未开启跨域 CORS。
@@ -288,3 +288,46 @@ GET 不写审批日志、不改变通知已读状态或申请版本。审批/撤
 TravelDraft / TravelApplication（及草稿列表）新增 `resubmissionOf: UUID | null`，仅表达来源，普通创建/替换接口拒绝同名输入，数据库禁止改写。GET 来源关系也不扩大正文权限；新旧申请分别按原有授权规则读取，客户端不得凭来源 ID 假定能读取原附件。全状态申请/任务摘要接口没有新增此字段。
 
 实现：src/lib/travel-resubmission.ts 定义 TravelSuccessor/TravelResubmission/TravelResubmissionResult；src/server/travel-resubmission.ts 导出 getTravelResubmission(token: string | undefined, id: string)、copyTravelForResubmission(token: string | undefined, id: string, version: number)，均自行开事务，直接服务调用前须校验 UUID/version。迁移 008 和 UI 说明见 WEB_TRAVEL_RESUBMISSION.md。
+
+## S4a 固定采购草稿
+
+本阶段只有草稿 CRUD；没有采购提交、审批、附件、重提、Web 页面或跨类型列表。保存允许不完整内容，不表示满足报价、预算和提交条件。
+
+| 方法与路径                      | 输入                                                                 | 成功 data                                                       |
+| ------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------- |
+| POST /api/purchase-drafts       | 下列可编辑字段，省略即默认                                           | 201，PurchaseDraft                                              |
+| GET /api/purchase-drafts        | page 1–100000（默认 1）、pageSize 1–100（默认 20）、keyword 最长 200 | 200，`{ items: PurchaseDraftSummary[], total, page, pageSize }` |
+| GET /api/purchase-drafts/:id    | UUID                                                                 | 200，PurchaseDraft                                              |
+| PUT /api/purchase-drafts/:id    | 完整替换可编辑字段及必传 version                                     | 200，PurchaseDraft，version 加 1                                |
+| DELETE /api/purchase-drafts/:id | 严格 `{ version }`                                                   | 200，`{ id, deleted: true }`                                    |
+
+version 是 JSON 整数 1–2147483647。仅有效 active 用户及有效部门下的本人 purchase 草稿可访问，管理员/同部门负责人无额外权限；列表不返回差旅，也不加入既有 travel 列表。不存在、他人或其他业务 ID 为 404 NOT_FOUND；本人非草稿 409 NOT_DRAFT；旧 version 为 409 VERSION_CONFLICT，编辑版本上限为 409 VERSION_LIMIT，采购主明细缺失为 409 DRAFT_INCOMPLETE。会话/身份 401/403 沿用既有约定，Cookie 写入需同源 Origin；未来非草稿不能用此接口编辑/删除。
+
+可编辑字段（字符串 trim；未知字段严格拒绝，包括服务端生成的身份/金额/编号/时间/状态）：
+
+| 字段                                           | 类型与限制                                    | 默认  |
+| ---------------------------------------------- | --------------------------------------------- | ----- |
+| title / reason                                 | 字符串，200 / 2000 字符                       | `""`  |
+| expectedDate                                   | `YYYY-MM-DD`，0001–9999 年有效日历日          | null  |
+| project                                        | 字符串，200 字符；部门由服务端另行确定        | `""`  |
+| budgetLimit                                    | 非负十进制金额字符串，最多十二位整数/两位小数 | null  |
+| selectionReason / singleSourceReason / remarks | 字符串，各 2000 字符                          | `""`  |
+| singleSource                                   | boolean，明确标记单一来源                     | false |
+| items                                          | 最多 100 条，顺序即显示顺序                   | `[]`  |
+| quotes                                         | 最多 20 条，顺序即显示顺序                    | `[]`  |
+
+items 每条为 `{ id?, name?, specification?, quantity?, unit?, unitPrice? }`。name/specification/unit 最长 200/500/40 字符，默认空。quantity 为正十进制字符串，最多九位整数和三位小数，默认 null；unitPrice 为正金额字符串，最多十二位整数和两位小数，默认 null。零、负数、指数记法、超出精度、JSON number 均拒绝；空缺用 null 或省略，不传空字符串。预算可为零。格式规范化为数量三位小数、金额两位小数。
+
+quotes 每条为 `{ id?, supplierName?, quoteDate?, amount?, basis?, purchaseUrl?, isOnline?, selected? }`。supplierName 最长 200，basis 最长 2000，purchaseUrl 最长 2000 字符且非空时必须为无账号密码的 HTTP(S) URL；默认空字符串。URL 仅存储，不抓取外部资源。quoteDate 为有效日历日或 null；amount 为上述正金额字符串或 null。isOnline/selected 默认为 false；同一草稿最多一家 selected=true，允许尚未选择。草稿可以只填一家报价、未填选择理由、单一来源说明或线上截图；这些提交前业务要求留给采购提交阶段，不静默视为合规。
+
+服务端为新 item/quote 生成 UUID。POST 中不能指定行 ID；PUT 只允许沿用本草稿同类行的 ID（稳定保留），新行省略 ID，省略的旧行删除，数组重排只改变顺序。重复 ID 或外来/不存在/跨类别 ID 拒绝为 400（INVALID_ROW_ID 或 VALIDATION_ERROR），整个事务回滚。PUT 不是 PATCH，省略顶层字段会清空/恢复默认，省略数组会删除全部对应行；编辑时应仅提交上述可编辑字段，不能把带 amount 的返回 item 原样回传。
+
+PurchaseDraft 返回可编辑字段和 `id/appNo/applicantId/departmentId/type="purchase"/status="draft"/version/createdAt/updatedAt/submittedAt=null/totalAmount`。items 另含服务端 `id/amount`，quotes 含服务端 id；不暴露 position，按数组顺序表示。列表摘要只含 `id/appNo/title/type/status/version/createdAt/updatedAt/budgetLimit/totalAmount/singleSource`，无整单明细。按 updatedAt 降序、id 升序，keyword 为标题/编号大小写不敏感字面子串（%/_ 非通配符）；计数、摘要和金额同一 SQL 快照，越界仍返回真实 total。列表时间点可能用带时区格式，语义均为 ISO 8601 时间点。
+
+金额口径：数量按千分位、单价按分进行整数计算，单行乘积四舍五入到分（half-up），总额为各行舍入后金额之和。数据库用 NUMERIC 与 round 校验同一口径，不由客户端传入计算结果。零行或任一行数量/单价缺失时 totalAmount=null，避免把不完整采购显示为有效总价；单行不完整时 amount=null。数量与单价均为正但乘积不足半分可得 0.00，草稿允许保留，提交时仍须进行完整性/有效金额校验。单行与已填行累计金额都不得超过 999999999999.99。未持久化冗余总额，读取时从明细计算；返回 null 不等于零。
+
+新草稿即分配全局 APP-编号，删除/回滚可空号；创建/保存使用会话用户当前部门，客户端不能指定。明细、报价、主表、版本同一事务；读取详情先锁申请 FOR SHARE，写入先 FOR UPDATE，避免读取混合版本。草稿不生成任务、日志或通知。POST 不是幂等创建，结果不确定时查询列表核对，不自动重放；PUT/DELETE 旧版本不得自动换新版本重试。
+
+采购 POST/PUT JSON 上限 256 KiB，其他 JSON（包括采购 DELETE）仍为 16 KiB；超限 413 PAYLOAD_TOO_LARGE，不因行数上限而保证每条都能同时填满最长文本。非 JSON 为 415；非法 JSON/字段/UUID/查询为 400。仅列表接受上述查询参数，其余采购草稿接口不接受任何查询；重复查询参数拒绝。正文带 attachmentId/截图引用也会拒绝，采购附件尚未实现。
+
+实现入口：src/lib/purchase.ts 的 purchaseDraftSchema / replacePurchaseDraftSchema / purchaseDraftListSchema、PurchaseDraftInput / ReplacePurchaseDraftInput / PurchaseDraft / PurchaseDraftSummary；src/server/purchase.ts 的 createPurchaseDraft(token, input)、getPurchaseDraft(token, id)、listPurchaseDrafts(token, input)、replacePurchaseDraft(token, id, input)、deletePurchaseDraft(token, id, version)，各自开事务。token 为 string | undefined，id 为 UUID string，version 为 number；调用服务前必须通过对应 schema/UUID 验证（尤其金额先规范化）。HTTP 边界在 purchase-handlers.ts；009 迁移详见 DATABASE.md。

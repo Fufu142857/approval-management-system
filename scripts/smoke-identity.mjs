@@ -809,6 +809,95 @@ try {
   const relationBeforeRestart = (
     await call(resubmissionPath, "GET", undefined, token)
   ).body.data;
+  // Fixed purchase drafts are isolated from travel APIs and do not start approval.
+  const purchaseInput = {
+    title: "采购草稿 HTTP 验收",
+    reason: "设备更新",
+    expectedDate: "2028-02-29",
+    budgetLimit: "1000",
+    singleSource: false,
+    items: [
+      { name: "物品甲", quantity: "1.5", unit: "件", unitPrice: "0.33" },
+      { name: "物品乙", quantity: "3", unitPrice: "0.10" },
+    ],
+    quotes: [
+      { supplierName: "甲", amount: "0.80", basis: "询价记录", selected: true },
+      { supplierName: "乙", amount: "0.70" },
+    ],
+  };
+  const purchaseCreated = await call(
+    "purchase-drafts",
+    "POST",
+    purchaseInput,
+    token,
+  );
+  assert.equal(purchaseCreated.response.status, 201);
+  const purchaseId = purchaseCreated.body.data.id;
+  assert.equal(purchaseCreated.body.data.totalAmount, "0.80");
+  assert.equal(
+    (await call(`purchase-drafts/${purchaseId}`, "GET", undefined, head.token))
+      .response.status,
+    404,
+  );
+  assert.equal(
+    (await call(`travel-drafts/${purchaseId}`, "GET", undefined, token))
+      .response.status,
+    404,
+  );
+  assert.equal(
+    (await call("purchase-drafts?page=1&page=2", "GET", undefined, token))
+      .response.status,
+    400,
+  );
+  const purchaseEdited = await call(
+    `purchase-drafts/${purchaseId}`,
+    "PUT",
+    {
+      ...purchaseInput,
+      version: 1,
+      title: "采购草稿修改后",
+      items: purchaseCreated.body.data.items.map(({ amount, ...item }) => {
+        void amount;
+        return item;
+      }),
+      quotes: purchaseCreated.body.data.quotes
+        .slice()
+        .reverse()
+        .map((quote, index) => ({ ...quote, selected: index === 0 })),
+    },
+    token,
+  );
+  assert.equal(purchaseEdited.response.status, 200);
+  assert.equal(
+    purchaseEdited.body.data.items[0].id,
+    purchaseCreated.body.data.items[0].id,
+  );
+  assert.equal(
+    purchaseEdited.body.data.quotes[0].id,
+    purchaseCreated.body.data.quotes[1].id,
+  );
+  assert.equal(purchaseEdited.body.data.version, 2);
+  assert.equal(
+    (
+      await call(
+        `purchase-drafts/${purchaseId}`,
+        "DELETE",
+        { version: 1 },
+        token,
+      )
+    ).response.status,
+    409,
+  );
+  const purchaseListBefore = (
+    await call(
+      "purchase-drafts?keyword=采购草稿修改后",
+      "GET",
+      undefined,
+      token,
+    )
+  ).body.data;
+  assert.equal(purchaseListBefore.total, 1);
+  assert.equal(purchaseListBefore.items[0].totalAmount, "0.80");
   const preview = await downloadFile(head.token, "inline");
   assert.equal(preview.status, 200);
   assert.match(preview.headers.get("content-disposition"), /^inline;/);
@@ -847,6 +936,38 @@ try {
   );
   assert.equal(replay.response.status, 200);
   assert.equal(replay.body.data.successor.id, copiedId);
+  assert.deepEqual(
+    (await call(`purchase-drafts/${purchaseId}`, "GET", undefined, token)).body
+      .data,
+    purchaseEdited.body.data,
+  );
+  assert.deepEqual(
+    (
+      await call(
+        "purchase-drafts?keyword=采购草稿修改后",
+        "GET",
+        undefined,
+        token,
+      )
+    ).body.data,
+    purchaseListBefore,
+  );
+  assert.equal(
+    (
+      await call(
+        `purchase-drafts/${purchaseId}`,
+        "DELETE",
+        { version: 2 },
+        token,
+      )
+    ).response.status,
+    200,
+  );
+  assert.equal(
+    (await call(`purchase-drafts/${purchaseId}`, "GET", undefined, token))
+      .response.status,
+    404,
+  );
   const persistedDownload = await downloadFile(head.token);
   assert.equal(persistedDownload.status, 200);
   assert.deepEqual(Buffer.from(await persistedDownload.arrayBuffer()), png);
@@ -870,7 +991,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals and restart persistence; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

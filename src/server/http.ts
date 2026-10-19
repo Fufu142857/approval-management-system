@@ -45,6 +45,7 @@ export function checkOrigin(request: Request, publicEndpoint = false) {
 export async function jsonBody<T>(
   request: Request,
   schema: z.ZodType<T>,
+  maxBytes = 16384,
 ): Promise<T> {
   if (
     request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !==
@@ -65,9 +66,13 @@ export async function jsonBody<T>(
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 16384) {
+      if (size > maxBytes) {
         await reader.cancel();
-        throw new ApiError(413, "PAYLOAD_TOO_LARGE", "请求正文超过 16 KiB");
+        throw new ApiError(
+          413,
+          "PAYLOAD_TOO_LARGE",
+          `请求正文超过 ${maxBytes / 1024} KiB`,
+        );
       }
       chunks.push(value);
     }
