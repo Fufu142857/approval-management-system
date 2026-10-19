@@ -1,6 +1,6 @@
 # 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；S3h 已接入这些列表及审批/撤回页面（见 WEB_TRAVEL_APPROVAL.md）；S3i 已接入通知页面与前台轮询（见 WEB_NOTIFICATIONS.md），S3j 新增固定差旅复制重提 GET/POST（见本文末节）；S4a 新增固定采购草稿 CRUD（见本文末节）；尚无自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；S3h 已接入这些列表及审批/撤回页面（见 WEB_TRAVEL_APPROVAL.md）；S3i 已接入通知页面与前台轮询（见 WEB_NOTIFICATIONS.md），S3j 新增固定差旅复制重提 GET/POST（见本文末节）；S4a 新增固定采购草稿 CRUD，S4b 新增采购报价附件（见本文末节）；尚无自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
@@ -208,13 +208,13 @@ Attachment：`id, appId, uploaderId, originalName, mimeType, sizeBytes, sha256, 
 
 共同查询参数：
 
-| 参数            | 默认/限制                                        | 含义                                                     |
-| --------------- | ------------------------------------------------ | -------------------------------------------------------- |
-| page / pageSize | 1 / 20，上限 100000 / 100，正整数                | 偏移分页                                                 |
-| type            | travel，当前只允许 travel                        | 固定业务类型；采购/报销尚未实现，传入其他类型返回 400    |
-| status          | all 或 draft/pending/approved/rejected/withdrawn | **申请当前状态**，在任务列表中也不是任务原决策结果       |
-| keyword         | 空串，trim 后最多 200 字符                       | 标题或编号不区分大小写的字面子串，% 与 _ 不作为通配符    |
-| from / to       | 可省略，YYYY-MM-DD，年份 0001–9999               | 上海日历日期闭区间；允许只传一端，反向或无效日期返回 400 |
+| 参数            | 默认/限制                                        | 含义                                                      |
+| --------------- | ------------------------------------------------ | --------------------------------------------------------- |
+| page / pageSize | 1 / 20，上限 100000 / 100，正整数                | 偏移分页                                                  |
+| type            | travel，当前只允许 travel                        | 固定差旅列表；采购/报销不在此列表中，传入其他类型返回 400 |
+| status          | all 或 draft/pending/approved/rejected/withdrawn | **申请当前状态**，在任务列表中也不是任务原决策结果        |
+| keyword         | 空串，trim 后最多 200 字符                       | 标题或编号不区分大小写的字面子串，% 与 _ 不作为通配符     |
+| from / to       | 可省略，YYYY-MM-DD，年份 0001–9999               | 上海日历日期闭区间；允许只传一端，反向或无效日期返回 400  |
 
 任务列表另有 state=pending/handled，默认 pending。未知字段、重复参数、非法枚举/分页均返回 400 VALIDATION_ERROR；不能提交 applicantId/approverId/departmentId 来改变范围。未登录或失效/停用账号为 401，待确认或部门无效为 403。空列表返回 200，不泄露他人记录数量。
 
@@ -291,7 +291,7 @@ TravelDraft / TravelApplication（及草稿列表）新增 `resubmissionOf: UUID
 
 ## S4a 固定采购草稿
 
-本阶段只有草稿 CRUD；没有采购提交、审批、附件、重提、Web 页面或跨类型列表。保存允许不完整内容，不表示满足报价、预算和提交条件。
+S4a 提供草稿 CRUD，S4b 已补采购报价附件；没有采购提交、审批、重提、Web 页面或跨类型列表。保存允许不完整内容，不表示满足报价、预算和提交条件。
 
 | 方法与路径                      | 输入                                                                 | 成功 data                                                       |
 | ------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -320,7 +320,7 @@ items 每条为 `{ id?, name?, specification?, quantity?, unit?, unitPrice? }`�
 
 quotes 每条为 `{ id?, supplierName?, quoteDate?, amount?, basis?, purchaseUrl?, isOnline?, selected? }`。supplierName 最长 200，basis 最长 2000，purchaseUrl 最长 2000 字符且非空时必须为无账号密码的 HTTP(S) URL；默认空字符串。URL 仅存储，不抓取外部资源。quoteDate 为有效日历日或 null；amount 为上述正金额字符串或 null。isOnline/selected 默认为 false；同一草稿最多一家 selected=true，允许尚未选择。草稿可以只填一家报价、未填选择理由、单一来源说明或线上截图；这些提交前业务要求留给采购提交阶段，不静默视为合规。
 
-服务端为新 item/quote 生成 UUID。POST 中不能指定行 ID；PUT 只允许沿用本草稿同类行的 ID（稳定保留），新行省略 ID，省略的旧行删除，数组重排只改变顺序。重复 ID 或外来/不存在/跨类别 ID 拒绝为 400（INVALID_ROW_ID 或 VALIDATION_ERROR），整个事务回滚。PUT 不是 PATCH，省略顶层字段会清空/恢复默认，省略数组会删除全部对应行；编辑时应仅提交上述可编辑字段，不能把带 amount 的返回 item 原样回传。
+服务端为新 item/quote 生成 UUID。POST 中不能指定行 ID；PUT 只允许沿用本草稿同类行的 ID（稳定保留），新行省略 ID，省略的旧行删除（S4b 起含附件报价会拒绝删除，需先显式删附件），数组重排只改变顺序。重复 ID 或外来/不存在/跨类别 ID 拒绝为 400（INVALID_ROW_ID 或 VALIDATION_ERROR），整个事务回滚。PUT 不是 PATCH，省略顶层字段会清空/恢复默认，省略数组会删除全部对应行；编辑时应仅提交上述可编辑字段，不能把带 amount 的返回 item 原样回传。
 
 PurchaseDraft 返回可编辑字段和 `id/appNo/applicantId/departmentId/type="purchase"/status="draft"/version/createdAt/updatedAt/submittedAt=null/totalAmount`。items 另含服务端 `id/amount`，quotes 含服务端 id；不暴露 position，按数组顺序表示。列表摘要只含 `id/appNo/title/type/status/version/createdAt/updatedAt/budgetLimit/totalAmount/singleSource`，无整单明细。按 updatedAt 降序、id 升序，keyword 为标题/编号大小写不敏感字面子串（%/_ 非通配符）；计数、摘要和金额同一 SQL 快照，越界仍返回真实 total。列表时间点可能用带时区格式，语义均为 ISO 8601 时间点。
 
@@ -328,6 +328,33 @@ PurchaseDraft 返回可编辑字段和 `id/appNo/applicantId/departmentId/type="
 
 新草稿即分配全局 APP-编号，删除/回滚可空号；创建/保存使用会话用户当前部门，客户端不能指定。明细、报价、主表、版本同一事务；读取详情先锁申请 FOR SHARE，写入先 FOR UPDATE，避免读取混合版本。草稿不生成任务、日志或通知。POST 不是幂等创建，结果不确定时查询列表核对，不自动重放；PUT/DELETE 旧版本不得自动换新版本重试。
 
-采购 POST/PUT JSON 上限 256 KiB，其他 JSON（包括采购 DELETE）仍为 16 KiB；超限 413 PAYLOAD_TOO_LARGE，不因行数上限而保证每条都能同时填满最长文本。非 JSON 为 415；非法 JSON/字段/UUID/查询为 400。仅列表接受上述查询参数，其余采购草稿接口不接受任何查询；重复查询参数拒绝。正文带 attachmentId/截图引用也会拒绝，采购附件尚未实现。
+采购 POST/PUT JSON 上限 256 KiB，其他 JSON（包括采购 DELETE）仍为 16 KiB；超限 413 PAYLOAD_TOO_LARGE，不因行数上限而保证每条都能同时填满最长文本。非 JSON 为 415；非法 JSON/字段/UUID/查询为 400。仅列表接受上述查询参数，其余采购草稿接口不接受任何查询；重复查询参数拒绝。正文带 attachmentId/截图引用也会拒绝，附件通过 S4b 的独立报价附件接口管理。
 
 实现入口：src/lib/purchase.ts 的 purchaseDraftSchema / replacePurchaseDraftSchema / purchaseDraftListSchema、PurchaseDraftInput / ReplacePurchaseDraftInput / PurchaseDraft / PurchaseDraftSummary；src/server/purchase.ts 的 createPurchaseDraft(token, input)、getPurchaseDraft(token, id)、listPurchaseDrafts(token, input)、replacePurchaseDraft(token, id, input)、deletePurchaseDraft(token, id, version)，各自开事务。token 为 string | undefined，id 为 UUID string，version 为 number；调用服务前必须通过对应 schema/UUID 验证（尤其金额先规范化）。HTTP 边界在 purchase-handlers.ts；009 迁移详见 DATABASE.md。
+
+## S4b 固定采购报价附件
+
+当前只服务本人采购草稿，采购提交/审批和页面尚未实现；不能把已存在附件当作已满足线上截图或报价完整性校验。先创建草稿并保存报价取得 quoteId，再上传。附件必须属于一条报价，不接受无报价的采购附件。
+
+| 方法与路径                                                     | 输入                                                                    | 成功 data / 内容                                                             |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| POST /api/purchase-drafts/:id/quotes/:quoteId/attachments      | multipart/form-data，恰好一个 file 与一个 version（十进制正整数字符串） | 201，`{ attachment: PurchaseAttachment, version }`                           |
+| GET /api/purchase-drafts/:id/attachments                       | 不接受查询参数                                                          | 200，`{ items: PurchaseAttachment[], totalBytes, version, status: "draft" }` |
+| DELETE /api/purchase-drafts/:id/attachments/:attachmentId      | JSON 严格 `{ version }`                                                 | 200，`{ id: attachmentId, deleted: true, version }`                          |
+| GET /api/purchase-drafts/:id/attachments/:attachmentId/content | disposition=inline 或 attachment，默认 attachment                       | 200，鉴权后的原文件字节                                                      |
+
+id、quoteId、attachmentId 均为 UUID。只有内容接口接受 disposition，其他附件路由不接受查询，未知/重复参数返回 400。上传体不接受 quoteId/appId/uploaderId 等额外字段；报价从路径指定并检查同一申请归属，上传人取会话用户。内容接口独立检查当前身份和草稿权限，URL 不是公开访问令牌。
+
+PurchaseAttachment 是现有 Attachment 元数据另加 `quoteId: string`：`id/appId/quoteId/uploaderId/originalName/mimeType/sizeBytes/sha256/createdAt`，不返回 storageKey/服务器路径。列表包含整张采购申请所有报价的附件，按 createdAt/id 排序；totalBytes 和 9 件/50 MiB 限额均按整张申请累计，不是每家供应商各一份限额。
+
+复用 S3e 的真实 JPEG/PNG/PDF 格式解析、扩展名/MIME 匹配、文件名限制、10 MiB 单件和 4000 万像素图片上限。multipart 总体上限为 10 MiB + 64 KiB，以读取字节计数为准，Content-Length 只做提前拒绝；读取上传正文前先鉴权并核报价归属，写事务内再次验证。文件存在私有 uploads/attachments（或 ATTACHMENT_STORAGE_DIR）中；预览/下载为 no-store、nosniff、sandbox CSP 与 UTF-8 安全文件名，保留原字节。只保存链接，不抓取电商资源，不把 PDF/图片文件存在当作真实报价内容已经审阅。
+
+每次成功上传/删除都只递增申请 version 并更新 updatedAt；不保存文字、改变报价 ID/金额/选择或发通知。旧版本 409 VERSION_CONFLICT，版本上限 409 VERSION_LIMIT；不得自动换版本或重放不确定写请求。查询列表及草稿核对后再由用户明确操作。文件缺失/摘要不符为 409 ATTACHMENT_UNAVAILABLE，列表元数据仍保留。空文件 400 EMPTY_ATTACHMENT；超单件/总限额/请求大小分别为 413 ATTACHMENT_TOO_LARGE / ATTACHMENT_QUOTA_EXCEEDED / PAYLOAD_TOO_LARGE；伪装/损坏/不支持格式为 415，沿用 S3e 错误码。
+
+未登录/失效会话 401，待确认/无效部门 403；不存在、他人、其他业务申请、跨单报价/附件为 404 NOT_FOUND。管理员/同部门负责人/财务没有草稿正文或文件特权。本人非草稿一律 409 NOT_DRAFT（包括列表和下载）；S4c 接入采购提交后，需要按真实正文权限另行开放提交后读取，本阶段未提前授权。
+
+**对 S4a 草稿编辑/删除的变化：** PUT 保留原 quoteId 时，报价改名/换序/改值不改变附件归属；若省略或删除有附件的报价，整单保存 409 QUOTE_HAS_ATTACHMENTS，所有表/版本保持不变。先通过附件 DELETE 显式删除文件，再使用最新 version 保存报价删除。删除整张草稿则在一个事务里按附件元数据 → 报价 → 明细 → 采购主表 → 申请删除，提交后回收无引用文件；失败回滚时不丢文件。报价 FK 为限制删除，不自动级联丢证据。
+
+文件写入/删除和整单删除按组织/身份/部门 → 存储共享锁 72004 → 申请行锁执行。PUT 不改文件，不需要存储锁，仍持申请行锁阻止与上传交错；读取持申请共享锁直至原字节读取完成。回收持 72004 排他锁后核全部 attachments 持久引用，不直接 unlink 不确定提交结果的文件。异常回收失败可运行 pnpm attachments:gc，必须配对当前数据库和私有目录，不能只迁移 Git。
+
+实现：src/server/purchase-attachments.ts 导出 authorizePurchaseAttachmentUpload(token, id, quoteId)、uploadPurchaseAttachment(token, id, quoteId, version, bytes: Buffer, filename, declaredType)、listPurchaseAttachments(token, id)、deletePurchaseAttachment(token, id, attachmentId, version)、getPurchaseAttachmentContent(token, id, attachmentId)。token: string | undefined，其余 ID/文件名/声明类型为 string，version: number；各自开事务，直接调用前验证 UUID/version。upload 返回 attachment/version，list 返回整单附件摘要，delete 返回删除结果，content 返回 `{ attachment, bytes }`，无存储键。类型在 src/lib/purchase-attachments.ts；purchase-attachment-handlers.ts 处理 HTTP；attachment-http.ts 复用有界 multipart 解析与内容响应头，差旅端点契约未改变。

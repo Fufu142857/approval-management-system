@@ -888,6 +888,62 @@ try {
     ).response.status,
     409,
   );
+  const purchaseQuoteId = purchaseEdited.body.data.quotes[0].id;
+  const purchaseAttachmentPath = `purchase-drafts/${purchaseId}/attachments`;
+  async function uploadPurchaseQuote(version) {
+    const data = new FormData();
+    data.set("file", new File([png], "报价.png", { type: "image/png" }));
+    data.set("version", String(version));
+    return fetch(
+      `${origin}/api/purchase-drafts/${purchaseId}/quotes/${purchaseQuoteId}/attachments`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, Origin: origin },
+        body: data,
+        signal: AbortSignal.timeout(10000),
+      },
+    );
+  }
+  const purchaseUpload = await uploadPurchaseQuote(2);
+  assert.equal(purchaseUpload.status, 201);
+  const purchaseFile = (await purchaseUpload.json()).data.attachment;
+  assert.equal(purchaseFile.quoteId, purchaseQuoteId);
+  assert.equal((await uploadPurchaseQuote(2)).status, 409);
+  const quoteDrop = await call(
+    `purchase-drafts/${purchaseId}`,
+    "PUT",
+    { version: 3 },
+    token,
+  );
+  assert.equal(quoteDrop.response.status, 409);
+  assert.equal(quoteDrop.body.error.code, "QUOTE_HAS_ATTACHMENTS");
+  const purchaseFilesBefore = (
+    await call(purchaseAttachmentPath, "GET", undefined, token)
+  ).body.data;
+  assert.deepEqual(purchaseFilesBefore.items, [purchaseFile]);
+  assert.equal(purchaseFilesBefore.version, 3);
+  const purchaseBeforeRestart = (
+    await call(`purchase-drafts/${purchaseId}`, "GET", undefined, token)
+  ).body.data;
+  const purchaseContentUrl = `${origin}/api/${purchaseAttachmentPath}/${purchaseFile.id}/content?disposition=inline`;
+  assert.equal(
+    (
+      await fetch(purchaseContentUrl, {
+        headers: { Authorization: `Bearer ${head.token}` },
+      })
+    ).status,
+    404,
+  );
+  const purchasePreview = await fetch(purchaseContentUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(purchasePreview.status, 200);
+  assert.match(purchasePreview.headers.get("content-disposition"), /^inline;/);
+  assert.match(
+    purchasePreview.headers.get("content-security-policy"),
+    /sandbox/,
+  );
+  assert.deepEqual(Buffer.from(await purchasePreview.arrayBuffer()), png);
   const purchaseListBefore = (
     await call(
       "purchase-drafts?keyword=采购草稿修改后",
@@ -939,7 +995,7 @@ try {
   assert.deepEqual(
     (await call(`purchase-drafts/${purchaseId}`, "GET", undefined, token)).body
       .data,
-    purchaseEdited.body.data,
+    purchaseBeforeRestart,
   );
   assert.deepEqual(
     (
@@ -952,12 +1008,42 @@ try {
     ).body.data,
     purchaseListBefore,
   );
+  assert.deepEqual(
+    (await call(purchaseAttachmentPath, "GET", undefined, token)).body.data,
+    purchaseFilesBefore,
+  );
+  const purchasePersisted = await fetch(purchaseContentUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(purchasePersisted.status, 200);
+  assert.deepEqual(Buffer.from(await purchasePersisted.arrayBuffer()), png);
+  assert.equal(
+    (
+      await call(
+        `${purchaseAttachmentPath}/${purchaseFile.id}`,
+        "DELETE",
+        { version: 3 },
+        token,
+      )
+    ).response.status,
+    200,
+  );
+  assert.equal(
+    (
+      await fetch(purchaseContentUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    ).status,
+    404,
+  );
+  // Leave a new file attached to exercise whole-draft metadata and storage cleanup.
+  assert.equal((await uploadPurchaseQuote(4)).status, 201);
   assert.equal(
     (
       await call(
         `purchase-drafts/${purchaseId}`,
         "DELETE",
-        { version: 2 },
+        { version: 5 },
         token,
       )
     ).response.status,
@@ -991,7 +1077,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals and restart persistence; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

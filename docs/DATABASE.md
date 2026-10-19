@@ -50,7 +50,7 @@ pnpm test:e2e
 
 `test:http` 会执行测试库迁移、清空身份表并级联清空业务数据，初始化临时测试管理员；生产构建在 127.0.0.1:3100 临时运行，按真实 HTTP 验证身份、草稿、固定提交及通过/驳回/撤回，并重启 Web 进程验证会话/草稿/已提交申请及快照、任务、日志、通知保留，完成后自动关闭。S3d 另通过真实 HTTP 验证通知列表/详情/筛选/未读数/幂等已读及权限，重启后核对首次阅读时间；原有事件去重也通过独立测试库查询检查。`test:e2e` 也会重置测试身份数据、创建分页夹具，并在 3101 启动浏览器测试服务；首次需安装 Playwright Chromium，或用 `E2E_BROWSER_CHANNEL=chrome pnpm test:e2e` 选择本机 Chrome。测试账号密码只用于临时测试库，不能用于交付；三组测试不能并行运行，详见 WEB_IDENTITY.md。
 
-组织/身份外键：部门被用户引用时限制删除；角色被授权时限制删除；用户关联的会话与角色可级联清理，但有管理员审计或业务历史引用的用户不能删除。系统提供停用而非物理删除用户。001_identity.sql 保持不变，固定业务由 002–009 新迁移建立和扩展；人工自定义模块相关表尚未创建。
+组织/身份外键：部门被用户引用时限制删除；角色被授权时限制删除；用户关联的会话与角色可级联清理，但有管理员审计或业务历史引用的用户不能删除。系统提供停用而非物理删除用户。001_identity.sql 保持不变，固定业务由 002–010 新迁移建立和扩展；人工自定义模块相关表尚未创建。
 
 ## S3a 固定差旅草稿迁移
 
@@ -117,7 +117,7 @@ S3a 仅实现草稿；S3b 的实例/任务/日志见下节。当前仍没有 pro
 
 CLI 适用于异常恢复及部署维护；不要拿开发库连接配测试文件目录或反过来，也不要让不同数据库共享附件目录。自动测试分别固定到 `tmp/attachments-vitest-test`、`tmp/attachments-http-test`、`tmp/attachments-e2e-test`，不会回收开发 uploads。测试套件仍不可并行，因为共用隔离 TEST_DATABASE_URL。
 
-环境迁移/备份时暂停业务写入与回收，成对保存数据库和整个附件目录，再同时恢复；不能只复制 Git 仓库或只备份数据库。运行目录被忽略，不上传票据原件。若已提交文件缺失或损坏，恢复匹配 SHA-256 的原对象；下载返回 409，不能通过重新上传改写历史。新环境先 `pnpm db:migrate` 到 009，再启动服务；无需重置或 seed 现有库。
+环境迁移/备份时暂停业务写入与回收，成对保存数据库和整个附件目录，再同时恢复；不能只复制 Git 仓库或只备份数据库。运行目录被忽略，不上传票据原件。若已提交文件缺失或损坏，恢复匹配 SHA-256 的原对象；下载返回 409，不能通过重新上传改写历史。新环境先 `pnpm db:migrate` 到 010，再启动服务；无需重置或 seed 现有库。
 
 验证：16 项附件测试使用真实 PG 和私有文件目录，覆盖格式、权限、冻结、版本竞争、故障补偿、完整性检查与回收等待上传。HTTP 测试使用独立存储，真实生产路由完成上传/删除/预览下载，并重启 Web 后核对元数据与文件字节。它不等于重启数据库、断电故障注入、病毒扫描或 Docker 部署验收。
 
@@ -151,12 +151,24 @@ S3i 只接入已有通知 API 的 Web 页面与可见轮询，无新增迁移，
 
 009_purchase_drafts.sql 将 applications.type 检查扩展为 travel/purchase（默认 travel 不变），新增 purchase_requests（app_id 一对一）、purchase_items 与 supplier_quotes（一对多）。仅固定字段，未增加流程模板、动态表单或采购执行实例。原 001–008 不变，存量差旅数据无需改写。
 
-purchase_requests 存原因、期望日期、项目、预算上限、选择理由、single_source 明示标记及说明、备注。items 存 UUID、申请、position、名称、规格、quantity NUMERIC(12,3)、单位、unit_price NUMERIC(14,2)；amount NUMERIC(14,2) 为 round(quantity * unit_price,2) 生成列。quotes 存 UUID、申请、position、供应商、报价日、正金额、依据、购买链接、is_online、selected。报价附件外键未添加，后续报价附件阶段再实现。
+purchase_requests 存原因、期望日期、项目、预算上限、选择理由、single_source 明示标记及说明、备注。items 存 UUID、申请、position、名称、规格、quantity NUMERIC(12,3)、单位、unit_price NUMERIC(14,2)；amount NUMERIC(14,2) 为 round(quantity * unit_price,2) 生成列。quotes 存 UUID、申请、position、供应商、报价日、正金额、依据、购买链接、is_online、selected。报价附件外键已由 S4b 的 010 添加，见下文。
 
 所有外键 RESTRICT，不因删除身份/申请自动丢失历史。写服务先组织/身份/部门锁，再申请行锁；三张采购表触发器也锁申请并要求 purchase/draft，阻止更换 app_id/行 ID 和非草稿修改/删除。采购主表类型不能切换为差旅，差旅也不能切换为采购。明细/报价的 (app_id,position) 唯一约束延迟到提交检查，允许同一事务稳定 ID 重排；报价按 app_id 的 selected 部分唯一索引限制最多选一家，替换前先撤销原选择再设置新选择。数量和单价为正或 null，预算非负或 null；日期限制 0001–9999 年。positions 为 1–100 / 1–20。
 
 采购总额从明细按 NUMERIC 求和，不另存冗余值；任一行金额未填写或零行返回 null。应用层通过 BigInt 校验每行舍入和累计上限。草稿保存校验值的合法性，不要求完整比价、预算覆盖、选择说明、单一来源说明或线上附件；这些条件不等于已通过提交验收。接口边界见 API.md。
 
-GET 详情先锁主表 FOR SHARE，再读取头部/明细/报价；PUT/DELETE 持有 FOR UPDATE，所有修改及版本一起提交。列表摘要/计数/金额单 SQL 快照。删除草稿显式按报价 → 明细 → 采购主表 → 申请删除；当前无采购文件，不调用差旅文件回收。后续接入采购附件时必须补对应关联和存储锁/补偿，不能直接复用本阶段删除顺序而忽略文件。
+GET 详情先锁主表 FOR SHARE，再读取头部/明细/报价；PUT/DELETE 持有 FOR UPDATE，所有修改及版本一起提交。列表摘要/计数/金额单 SQL 快照。S4a 时删除草稿按报价 → 明细 → 采购主表 → 申请；S4b 已扩展为先取存储锁、删除附件元数据，再删报价/明细/主表/申请，提交后回收文件。
 
 开发库已应用 009 并重复迁移；前后对 users、departments、user_roles、sessions、admin_audit_logs、applications、travel_requests、approval_instances/tasks/logs、notifications 与 attachments 的排序 JSON 摘要核对一致，未重置或 seed 原库。新增采购表初始为空，既有文件未改动。测试继续使用独立 approval_test。
+
+## S4b 采购报价附件
+
+010_purchase_quote_attachments.sql 为 attachments 新增可空 supplier_quote_id，并以 (supplier_quote_id, app_id) 复合外键引用 supplier_quotes(id, app_id)，ON DELETE RESTRICT；按报价建索引。已有差旅行新列为 null，原行和文件不用改写。触发器持申请行锁，要求采购附件插入时申请为 purchase/draft、报价非空且上传人为申请人；报价实际属于同一申请由复合 FK 保证，非采购不得携带报价外键。采购附件元数据不可 UPDATE，非草稿不能 INSERT/DELETE；不得通过重新绑定把已有文件挪到另一报价。
+
+采购附件服务只允许本人有效草稿，读取列表与内容持申请共享锁，上传/删除先组织/身份/部门 → 存储共享锁 72004 → 申请排他锁，再核最新 version、报价/附件归属和整单配额。使用现有私有文件存储、格式解析及摘要校验；没有新增文件路径或第二套回收器。所有报价共用 9 件、50 MiB 限额，单件 10 MiB。
+
+purchase.ts 的报价替换先检查被省略报价是否有附件：有则 409 QUOTE_HAS_ATTACHMENTS 并完整回滚，不能用 PUT 隐式丢弃文件。保留相同 quoteId 的编辑/排序不会修改附件。整单 DELETE 新增存储锁和元数据删除，成功提交后才回收文件，数据库错误不先删物理文件。单文件删除也先提交元数据/版本再回收；上传失败通过持久引用检查回收孤儿。提交结果不确定时保留可能仍被引用的对象，不用异常直接推断文件应该删除。
+
+回收继续扫描整张 attachments 表，差旅/采购的有效对象都保留。数据库、附件目录需成对备份/迁移；无法立即回收时保留孤儿并记录清理提示，恢复存储后运行 pnpm attachments:gc。S4b 仅做草稿附件，未实现采购提交后正文/文件访问；后续应在真实采购权限事务中复用文件完整性检查，不直接照搬草稿读取授权。
+
+开发库已应用 010 并重复迁移；对身份/会话/审计、采购/差旅、执行/通知和附件既有字段的排序 JSON 摘要核对一致（附件排除新增 supplier_quote_id 列），未重置/seed 或修改既有文件。原差旅附件新列为 null；测试仍使用独立 approval_test 与隔离存储。

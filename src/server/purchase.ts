@@ -10,12 +10,16 @@ import type {
 import { requireBusinessActor } from "./business-auth";
 import { transaction } from "./db";
 import { ApiError } from "./errors";
+import {
+  lockAttachmentStorage,
+  tryCollectAttachmentGarbage,
+} from "./attachment-storage";
 
 const totalSql = `(SELECT CASE WHEN count(*)>0 AND count(amount)=count(*) THEN sum(amount)::numeric(14,2)::text ELSE NULL END FROM purchase_items WHERE app_id=a.id)`;
 const summaryColumns = `a.id,a.app_no AS "appNo",a.title,a.type,a.status,a.version,
  a.created_at AS "createdAt",a.updated_at AS "updatedAt",p.budget_limit::text AS "budgetLimit",
  p.single_source AS "singleSource",${totalSql} AS "totalAmount"`;
-async function lockDraft(
+export async function lockPurchaseDraft(
   client: PoolClient,
   id: string,
   ownerId: string,
@@ -103,6 +107,16 @@ async function replaceRows(
         "明细 ID 必须来自本草稿；新明细请省略 ID",
       );
   }
+  const removedWithFiles = await client.query(
+    "SELECT 1 FROM attachments WHERE app_id=$1 AND supplier_quote_id IS NOT NULL AND NOT (supplier_quote_id=ANY($2::uuid[])) LIMIT 1",
+    [id, input.quotes.flatMap((row) => (row.id ? [row.id] : []))],
+  );
+  if (removedWithFiles.rowCount)
+    throw new ApiError(
+      409,
+      "QUOTE_HAS_ATTACHMENTS",
+      "要删除的报价仍有关联附件，请先显式删除附件再保存",
+    );
   // Clear selection first, so selecting an existing different quote cannot hit the unique index.
   await client.query(
     "UPDATE supplier_quotes SET selected=false WHERE app_id=$1 AND selected",
@@ -184,7 +198,7 @@ export async function createPurchaseDraft(
 export async function getPurchaseDraft(token: string | undefined, id: string) {
   return transaction(async (client) => {
     const actor = await requireBusinessActor(token, client);
-    await lockDraft(client, id, actor.id, false);
+    await lockPurchaseDraft(client, id, actor.id, false);
     return detail(client, id);
   });
 }
@@ -217,7 +231,7 @@ export async function replacePurchaseDraft(
 ) {
   return transaction(async (client) => {
     const actor = await requireBusinessActor(token, client);
-    const draft = await lockDraft(client, id, actor.id, true);
+    const draft = await lockPurchaseDraft(client, id, actor.id, true);
     checkVersion(draft.version, input.version);
     if (draft.version === 2147483647)
       throw new ApiError(409, "VERSION_LIMIT", "草稿已达到可编辑版本上限");
@@ -239,14 +253,18 @@ export async function deletePurchaseDraft(
   id: string,
   version: number,
 ) {
-  return transaction(async (client) => {
+  const result = await transaction(async (client) => {
     const actor = await requireBusinessActor(token, client);
-    const draft = await lockDraft(client, id, actor.id, true);
+    await lockAttachmentStorage(client);
+    const draft = await lockPurchaseDraft(client, id, actor.id, true);
     checkVersion(draft.version, version);
+    await client.query("DELETE FROM attachments WHERE app_id=$1", [id]);
     await client.query("DELETE FROM supplier_quotes WHERE app_id=$1", [id]);
     await client.query("DELETE FROM purchase_items WHERE app_id=$1", [id]);
     await client.query("DELETE FROM purchase_requests WHERE app_id=$1", [id]);
     await client.query("DELETE FROM applications WHERE id=$1", [id]);
     return { id, deleted: true };
   });
+  await tryCollectAttachmentGarbage();
+  return result;
 }
