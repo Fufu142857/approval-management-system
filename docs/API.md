@@ -334,7 +334,7 @@ PurchaseDraft 返回可编辑字段和 `id/appNo/applicantId/departmentId/type="
 
 ## S4b 固定采购报价附件
 
-当前只服务本人采购草稿，采购提交/审批和页面尚未实现；不能把已存在附件当作已满足线上截图或报价完整性校验。先创建草稿并保存报价取得 quoteId，再上传。附件必须属于一条报价，不接受无报价的采购附件。
+本节接口只服务本人采购草稿；S4c 提交及提交后读取见下一节，审批动作和页面尚未实现。不能把已存在附件当作已满足线上截图或报价完整性校验。先创建草稿并保存报价取得 quoteId，再上传。附件必须属于一条报价，不接受无报价的采购附件。
 
 | 方法与路径                                                     | 输入                                                                    | 成功 data / 内容                                                             |
 | -------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -351,10 +351,44 @@ PurchaseAttachment 是现有 Attachment 元数据另加 `quoteId: string`：`id/
 
 每次成功上传/删除都只递增申请 version 并更新 updatedAt；不保存文字、改变报价 ID/金额/选择或发通知。旧版本 409 VERSION_CONFLICT，版本上限 409 VERSION_LIMIT；不得自动换版本或重放不确定写请求。查询列表及草稿核对后再由用户明确操作。文件缺失/摘要不符为 409 ATTACHMENT_UNAVAILABLE，列表元数据仍保留。空文件 400 EMPTY_ATTACHMENT；超单件/总限额/请求大小分别为 413 ATTACHMENT_TOO_LARGE / ATTACHMENT_QUOTA_EXCEEDED / PAYLOAD_TOO_LARGE；伪装/损坏/不支持格式为 415，沿用 S3e 错误码。
 
-未登录/失效会话 401，待确认/无效部门 403；不存在、他人、其他业务申请、跨单报价/附件为 404 NOT_FOUND。管理员/同部门负责人/财务没有草稿正文或文件特权。本人非草稿一律 409 NOT_DRAFT（包括列表和下载）；S4c 接入采购提交后，需要按真实正文权限另行开放提交后读取，本阶段未提前授权。
+未登录/失效会话 401，待确认/无效部门 403；不存在、他人、其他业务申请、跨单报价/附件为 404 NOT_FOUND。管理员/同部门负责人/财务没有草稿正文或文件特权。本人非草稿一律 409 NOT_DRAFT（包括列表和下载）；S4c 已另行提供 /api/purchase-applications 下的提交后读取，不能用草稿路径读取已提交正文或文件。
 
 **对 S4a 草稿编辑/删除的变化：** PUT 保留原 quoteId 时，报价改名/换序/改值不改变附件归属；若省略或删除有附件的报价，整单保存 409 QUOTE_HAS_ATTACHMENTS，所有表/版本保持不变。先通过附件 DELETE 显式删除文件，再使用最新 version 保存报价删除。删除整张草稿则在一个事务里按附件元数据 → 报价 → 明细 → 采购主表 → 申请删除，提交后回收无引用文件；失败回滚时不丢文件。报价 FK 为限制删除，不自动级联丢证据。
 
 文件写入/删除和整单删除按组织/身份/部门 → 存储共享锁 72004 → 申请行锁执行。PUT 不改文件，不需要存储锁，仍持申请行锁阻止与上传交错；读取持申请共享锁直至原字节读取完成。回收持 72004 排他锁后核全部 attachments 持久引用，不直接 unlink 不确定提交结果的文件。异常回收失败可运行 pnpm attachments:gc，必须配对当前数据库和私有目录，不能只迁移 Git。
 
 实现：src/server/purchase-attachments.ts 导出 authorizePurchaseAttachmentUpload(token, id, quoteId)、uploadPurchaseAttachment(token, id, quoteId, version, bytes: Buffer, filename, declaredType)、listPurchaseAttachments(token, id)、deletePurchaseAttachment(token, id, attachmentId, version)、getPurchaseAttachmentContent(token, id, attachmentId)。token: string | undefined，其余 ID/文件名/声明类型为 string，version: number；各自开事务，直接调用前验证 UUID/version。upload 返回 attachment/version，list 返回整单附件摘要，delete 返回删除结果，content 返回 `{ attachment, bytes }`，无存储键。类型在 src/lib/purchase-attachments.ts；purchase-attachment-handlers.ts 处理 HTTP；attachment-http.ts 复用有界 multipart 解析与内容响应头，差旅端点契约未改变。
+
+## S4c 固定采购提交与提交后详情
+
+| 方法与路径                                                           | 输入                                              | 成功响应                                                            |
+| -------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------- |
+| POST /api/purchase-drafts/:id/submit                                 | JSON 严格 `{ version }`                           | 200，`{ application, workflow, tasks, logs }`                       |
+| GET /api/purchase-applications/:id                                   | 无查询参数                                        | 200，同上                                                           |
+| GET /api/purchase-applications/:id/attachments                       | 无查询参数                                        | 200，`{ items: PurchaseAttachment[], totalBytes, version, status }` |
+| GET /api/purchase-applications/:id/attachments/:attachmentId/content | disposition=inline 或 attachment，默认 attachment | 200，受控原文件字节                                                 |
+
+UUID、有效身份、Origin、JSON 16 KiB 限额沿用公共约定。提交只收最新正整数 version，不接受正文替换、身份/部门/审批人、状态或金额字段；除内容 disposition 外，以上接口拒绝所有查询（含重复参数）。只允许本人 draft 提交；不存在/他人/跨类型为 404，非草稿 409 NOT_DRAFT，旧版本 409 VERSION_CONFLICT，版本上限 409 VERSION_LIMIT。读取未知资源/其他人草稿/未授权申请均为 404。申请人提交后须改用 purchase-applications 路径，原草稿 GET/PUT/DELETE 和文件读写仍返回 NOT_DRAFT。
+
+提交读取数据库已保存内容，核验规则如下：
+
+- 标题、原因、期望到货日期、预算上限和选择理由必填；部门取当前有效身份，项目/备注可空。至少一条完整明细（支持多条），每条名称/规格/数量/单位/单价必填，数量/单价正数、行金额 half-up 到分后大于零，再精确合计。
+- 预算覆盖计算的预计总额；拟选报价有金额时也不能超过预算。不强制总额等于报价，避免把数量 × 预计单价改成供应商报价。此为固定业务的预算校验口径，不含金额分流。
+- 普通比价至少两家不同供应商；名称 trim、NFKC 和转小写后检查重复。单一来源必须 singleSource=true、恰好一家报价及非空 singleSourceReason。每条已保存报价均需完整，不能静默丢弃空行。
+- 每家须有名称、日期，以及金额或 basis 明细说明；同时须有 basis 依据或本报价附件。无金额报价允许用 basis 记录明细，不能将 null 当作零价格参与比较。必须选择一家供应商；selectionReason 始终必填，未选最低价据此说明。
+- isOnline=true 的报价必须有 HTTP(S) 购买链接及属于该报价的 JPEG/PNG 附件；其他报价的图片或 PDF 不能替代。仅核对格式/关联和完整性，不识别图片是否真实截图，不抓取链接或实时价格。
+- 核整单附件关联/9 件与 50 MiB 配额，并逐一读取所有报价附件（含未选报价），校验大小及 SHA-256。字段问题返回 400 VALIDATION_ERROR 与 fieldErrors；关联/配额不一致 409 ATTACHMENT_INCONSISTENT，缺失/损坏文件 409 ATTACHMENT_UNAVAILABLE。失败时所有记录及版本不变。
+
+用户在 S4c 明确选择固定路径“本部门唯一有效负责人 → 全组织唯一有效企业负责人”（role_code 分别 department_head、company_head），ruleVersion 为 fixed-purchase-v1；不按金额分支。两级各须恰好一名 active 且部门有效的人员，缺失/多名 409 APPROVER_UNRESOLVED；任一步是申请人本人 409 SELF_APPROVAL。不任意挑人或跳步，同一非申请人可承担两步。原差旅 fixed-travel-v1 的第二步仍是财务，不受此改变影响。
+
+提交在组织/身份/部门锁后持申请 FOR UPDATE，单事务更新 pending、当前部门、version+1 和提交时间，写不可变实例/路径及实际人员快照、两个任务（部门 pending 且已激活、企业 blocked）、submitted 日志和首节点 approval.pending 通知。重复/竞争提交只有一次成功；任何写入失败整体回滚。编号沿用草稿编号。
+
+返回 application 是完整采购字段及稳定明细/报价 ID、数据库精确金额、状态/版本和 ISO 时间；submittedAt 非空。workflow 含 id/ruleVersion/submittedVersion/routeSnapshot/createdAt。快照包括申请人/部门及两个实际审批人的 ID/姓名/部门、固定规则、budgetLimit/totalAmount、选择理由/单一来源标记及原因、selectedQuoteId/selectedQuoteAmount、priceComparisonComplete、lowestQuoteAmount、selectedNotLowest，以及 attachmentEvidence（id/quoteId/mimeType/sizeBytes/sha256，不含 storageKey）。任何报价缺少金额时 priceComparisonComplete=false，lowestQuoteAmount 与 selectedNotLowest 为 null；价格齐全时按精确分比较，包括同价并列。完整报价及明细保留在提交后冻结的业务表中。
+
+tasks 按 seqNo 排序，包含 id/seqNo/name/approverId/status/createdAt/activatedAt/finishedAt；logs 按 createdAt/id 排序，包含 id/taskId/actorId/action/opinion/result/applicationVersion/createdAt。HTTP 时间为 ISO 字符串。实例/日志不可改删；采购请求、明细、报价及附件在非草稿时由已有触发器冻结。
+
+提交后正文/附件授权一致：当前有效申请人或曾激活任务的实际人员可读；未激活的企业负责人、其他同角色人员、财务和管理员均无额外权限。先锁申请 FOR SHARE，再用新语句检查授权，直到正文/任务/日志/文件字节读取完成；以后状态写操作须沿用相同申请行锁。提交后文件仅可读，无新增上传/删除路径。
+
+通知继续使用既有本人通知接口，采购待办事件 target.type=purchase，apiPath=/api/purchase-applications/:id，task 为当前实际任务状态；目标仍独立按正文权限校验。现有通知页面可显示事件和状态，但只为已接入的差旅类型展示页面链接，采购页面跳转留待后续，不将 API 地址当页面地址。
+
+实现入口：purchase-submission.ts 的 submitPurchaseDraft(token, id, version) / getPurchaseApplication(token, id) 自行开事务；参数类型分别 string | undefined、string、number。purchase-attachments.ts 新增 listSubmittedPurchaseAttachments(token, id) / getSubmittedPurchaseAttachmentContent(token, id, attachmentId)，自行开事务。直接调用前校验 UUID/version。purchase-access.ts 的 lockSubmittedPurchase(client, id, actorId) 只可用于已完成 requireBusinessActor 的事务；readPurchaseDetail(client, id) 不自行鉴权，调用方必须先授权并持申请锁。PurchaseRecord 位于 src/lib/purchase.ts；固定提交校验位于 purchase-submission-validation.ts。本阶段没有采购审批/撤回、重提、列表或 Web 页面接口，不包含自定义模板解释。

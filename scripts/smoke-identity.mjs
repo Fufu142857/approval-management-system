@@ -960,10 +960,148 @@ try {
   assert.match(preview.headers.get("content-security-policy"), /sandbox/);
   assert.deepEqual(Buffer.from(await preview.arrayBuffer()), png);
   assert.equal((await downloadFile(finance.token)).status, 404);
+  // S4c keeps the S4b draft/delete fixture and adds a separate submitted purchase.
+  const companyHead = await approver(
+    "companyhead",
+    "company_head",
+    financeDepartment.id,
+  );
+  const purchaseReady = await call(
+    "purchase-drafts",
+    "POST",
+    {
+      ...purchaseInput,
+      title: "采购提交 HTTP 验收",
+      selectionReason: "交货日期更合适",
+      items: purchaseInput.items.map((item) => ({
+        ...item,
+        specification: "标准型",
+        unit: "件",
+      })),
+      quotes: purchaseInput.quotes.map((quote, index) => ({
+        ...quote,
+        quoteDate: "2028-02-01",
+        basis: "询价记录",
+        isOnline: index === 0,
+        purchaseUrl: index === 0 ? "https://example.invalid/item" : "",
+      })),
+    },
+    token,
+  );
+  assert.equal(purchaseReady.response.status, 201);
+  const submittedPurchaseId = purchaseReady.body.data.id;
+  const purchaseSubmitPath = `purchase-drafts/${submittedPurchaseId}/submit`;
+  assert.equal(
+    (await call(purchaseSubmitPath, "POST", { version: 1 }, token)).response
+      .status,
+    400,
+  );
+  const proofForm = new FormData();
+  proofForm.set("file", new File([png], "采购截图.png", { type: "image/png" }));
+  proofForm.set("version", "1");
+  const proofResponse = await fetch(
+    `${origin}/api/purchase-drafts/${submittedPurchaseId}/quotes/${purchaseReady.body.data.quotes[0].id}/attachments`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: proofForm,
+    },
+  );
+  assert.equal(proofResponse.status, 201);
+  const proof = (await proofResponse.json()).data.attachment;
+  const purchaseSubmitted = await call(
+    purchaseSubmitPath,
+    "POST",
+    { version: 2 },
+    token,
+  );
+  assert.equal(purchaseSubmitted.response.status, 200);
+  const purchaseSnapshot = purchaseSubmitted.body.data;
+  assert.equal(purchaseSnapshot.workflow.ruleVersion, "fixed-purchase-v1");
+  assert.equal(purchaseSnapshot.workflow.routeSnapshot.selectedNotLowest, true);
+  assert.deepEqual(
+    purchaseSnapshot.tasks.map((task) => [task.approverId, task.status]),
+    [
+      [head.id, "pending"],
+      [companyHead.id, "blocked"],
+    ],
+  );
+  assert.equal(purchaseSnapshot.application.version, 3);
+  const purchaseDetailPath = `purchase-applications/${submittedPurchaseId}`;
+  const purchaseProofPath = `${origin}/api/${purchaseDetailPath}/attachments/${proof.id}/content?disposition=inline`;
+  for (const actor of [head, companyHead, finance]) {
+    const allowed = actor.id === head.id;
+    assert.equal(
+      (await call(purchaseDetailPath, "GET", undefined, actor.token)).response
+        .status,
+      allowed ? 200 : 404,
+    );
+    const content = await fetch(purchaseProofPath, {
+      headers: { Authorization: `Bearer ${actor.token}` },
+    });
+    assert.equal(content.status, allowed ? 200 : 404);
+    if (allowed)
+      assert.deepEqual(Buffer.from(await content.arrayBuffer()), png);
+  }
+  assert.equal(
+    (await call(purchaseSubmitPath, "POST", { version: 2 }, token)).response
+      .status,
+    409,
+  );
+  assert.equal(
+    (
+      await call(
+        `purchase-drafts/${submittedPurchaseId}`,
+        "DELETE",
+        { version: 3 },
+        token,
+      )
+    ).response.status,
+    409,
+  );
+  const purchaseSubmittedFiles = (
+    await call(
+      `${purchaseDetailPath}/attachments`,
+      "GET",
+      undefined,
+      head.token,
+    )
+  ).body.data;
+  assert.deepEqual(purchaseSubmittedFiles.items, [proof]);
+  const purchaseNotice = (
+    await call("notifications?pageSize=100", "GET", undefined, head.token)
+  ).body.data.items.find((item) => item.appId === submittedPurchaseId);
+  assert.equal(purchaseNotice.target.apiPath, `/api/${purchaseDetailPath}`);
+  assert.equal(purchaseNotice.target.type, "purchase");
   server.child.kill("SIGTERM");
   await server.closed;
   server = startServer();
   await ready();
+  assert.deepEqual(
+    (await call(purchaseDetailPath, "GET", undefined, head.token)).body.data,
+    purchaseSnapshot,
+  );
+  assert.deepEqual(
+    (
+      await call(
+        `${purchaseDetailPath}/attachments`,
+        "GET",
+        undefined,
+        head.token,
+      )
+    ).body.data,
+    purchaseSubmittedFiles,
+  );
+  const persistedProof = await fetch(purchaseProofPath, {
+    headers: { Authorization: `Bearer ${head.token}` },
+  });
+  assert.equal(persistedProof.status, 200);
+  assert.deepEqual(Buffer.from(await persistedProof.arrayBuffer()), png);
+  assert.equal(
+    (await call(purchaseDetailPath, "GET", undefined, companyHead.token))
+      .response.status,
+    404,
+  );
   assert.deepEqual(
     (await call(resubmissionPath, "GET", undefined, token)).body.data,
     relationBeforeRestart,
@@ -1077,7 +1215,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

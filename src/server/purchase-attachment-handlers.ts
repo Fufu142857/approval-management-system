@@ -11,6 +11,8 @@ import {
   authorizePurchaseAttachmentUpload,
   uploadPurchaseAttachment,
   listPurchaseAttachments,
+  listSubmittedPurchaseAttachments,
+  getSubmittedPurchaseAttachmentContent,
   deletePurchaseAttachment,
   getPurchaseAttachmentContent,
 } from "./purchase-attachments";
@@ -96,6 +98,39 @@ export function purchaseAttachmentContentHandler(
     const id = z.uuid().parse(params.id);
     const attachmentId = z.uuid().parse(params.attachmentId);
     const { attachment, bytes } = await getPurchaseAttachmentContent(
+      requestToken(request),
+      id,
+      attachmentId,
+    );
+    return attachmentResponse(attachment, bytes, disposition);
+  });
+}
+
+export function submittedPurchaseAttachmentsHandler(
+  request: Request,
+  context: Context,
+) {
+  return endpoint(async () => {
+    emptyAttachmentQuery.parse(query(request));
+    return data(
+      await listSubmittedPurchaseAttachments(
+        requestToken(request),
+        z.uuid().parse((await context.params).id),
+      ),
+    );
+  });
+}
+
+export function submittedPurchaseAttachmentContentHandler(
+  request: Request,
+  context: Context,
+) {
+  return endpoint(async () => {
+    const { disposition } = attachmentContentQuery.parse(query(request));
+    const params = await context.params;
+    const id = z.uuid().parse(params.id);
+    const attachmentId = z.uuid().parse(params.attachmentId);
+    const { attachment, bytes } = await getSubmittedPurchaseAttachmentContent(
       requestToken(request),
       id,
       attachmentId,

@@ -18,7 +18,7 @@ export type NotificationItem = {
   createdAt: string;
   readAt: string | null;
   target: {
-    type: "travel";
+    type: "travel" | "purchase";
     id: string;
     status: string;
     apiPath: string;

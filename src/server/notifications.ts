@@ -10,13 +10,13 @@ import { ApiError } from "./errors";
 // Each read obtains event and current target/task state from one SQL snapshot.
 const projection = `SELECT n.id,n.app_id AS "appId",n.kind,n.title,n.created_at AS "createdAt",n.read_at AS "readAt",
   CASE WHEN access.allowed THEN jsonb_build_object('type',a.type,'id',a.id,'status',a.status,
-    'apiPath','/api/travel-applications/'||a.id::text) ELSE NULL END AS target,
+    'apiPath','/api/'||a.type||'-applications/'||a.id::text) ELSE NULL END AS target,
   CASE WHEN access.allowed AND t.id IS NOT NULL THEN jsonb_build_object('id',t.id,'status',t.status) ELSE NULL END AS task`;
 const targetJoins = `JOIN applications a ON a.id=n.app_id
   LEFT JOIN approval_instances i ON i.app_id=a.id
   LEFT JOIN approval_tasks t ON t.instance_id=i.id AND t.approver_id=$1
     AND n.kind='approval.pending' AND n.event_key='task:'||t.id::text||':pending'
-  CROSS JOIN LATERAL (SELECT a.type='travel' AND a.status<>'draft' AND
+  CROSS JOIN LATERAL (SELECT a.type IN ('travel','purchase') AND a.status<>'draft' AND
     (a.applicant_id=$1 OR EXISTS (SELECT 1 FROM approval_tasks owned
       WHERE owned.instance_id=i.id AND owned.approver_id=$1 AND owned.activated_at IS NOT NULL)) AS allowed) access`;
 

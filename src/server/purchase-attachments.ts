@@ -9,6 +9,7 @@ import { transaction } from "./db";
 import { ApiError } from "./errors";
 import type { PurchaseAttachment } from "../lib/purchase-attachments";
 import { lockPurchaseDraft } from "./purchase";
+import { lockSubmittedPurchase } from "./purchase-access";
 import {
   lockAttachmentStorage,
   readAttachmentObject,
@@ -128,13 +129,16 @@ export async function uploadPurchaseAttachment(
     throw error;
   }
 }
-export async function listPurchaseAttachments(
+async function listAttachments(
   token: string | undefined,
   id: string,
+  submitted: boolean,
 ) {
   return transaction(async (client) => {
     const actor = await requireBusinessActor(token, client);
-    const app = await lockPurchaseDraft(client, id, actor.id, false);
+    const app = await (submitted
+      ? lockSubmittedPurchase(client, id, actor.id)
+      : lockPurchaseDraft(client, id, actor.id, false));
     const result = await client.query<AttachmentRow>(
       `SELECT ${columns} FROM attachments WHERE app_id=$1 ORDER BY created_at,id`,
       [id],
@@ -172,14 +176,17 @@ export async function deletePurchaseAttachment(
   await tryCollectAttachmentGarbage();
   return result;
 }
-export async function getPurchaseAttachmentContent(
+async function attachmentContent(
   token: string | undefined,
   id: string,
   attachmentId: string,
+  submitted: boolean,
 ) {
   return transaction(async (client) => {
     const actor = await requireBusinessActor(token, client);
-    await lockPurchaseDraft(client, id, actor.id, false);
+    await (submitted
+      ? lockSubmittedPurchase(client, id, actor.id)
+      : lockPurchaseDraft(client, id, actor.id, false));
     const result = await client.query<AttachmentRow & { storageKey: string }>(
       `SELECT ${columns},storage_key AS "storageKey" FROM attachments WHERE id=$1 AND app_id=$2`,
       [attachmentId, id],
@@ -192,3 +199,22 @@ export async function getPurchaseAttachmentContent(
     };
   });
 }
+
+export const listPurchaseAttachments = (
+  token: string | undefined,
+  id: string,
+) => listAttachments(token, id, false);
+export const listSubmittedPurchaseAttachments = (
+  token: string | undefined,
+  id: string,
+) => listAttachments(token, id, true);
+export const getPurchaseAttachmentContent = (
+  token: string | undefined,
+  id: string,
+  attachmentId: string,
+) => attachmentContent(token, id, attachmentId, false);
+export const getSubmittedPurchaseAttachmentContent = (
+  token: string | undefined,
+  id: string,
+  attachmentId: string,
+) => attachmentContent(token, id, attachmentId, true);

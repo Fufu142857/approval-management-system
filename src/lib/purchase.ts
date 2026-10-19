@@ -179,3 +179,8 @@ export type PurchaseDraftSummary = Pick<
   | "totalAmount"
   | "singleSource"
 >;
+
+export type PurchaseRecord = Omit<PurchaseDraft, "status" | "submittedAt"> & {
+  status: "draft" | "pending" | "approved" | "rejected" | "withdrawn";
+  submittedAt: string | null;
+};

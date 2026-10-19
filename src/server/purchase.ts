@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import type { z } from "zod";
 import type {
   PurchaseDraft,
+  PurchaseRecord,
   PurchaseDraftInput,
   PurchaseDraftSummary,
   ReplacePurchaseDraftInput,
@@ -44,13 +45,20 @@ function checkVersion(actual: number, expected: number) {
       "草稿已被修改，请重新加载后再操作",
     );
 }
-async function detail(client: PoolClient, id: string): Promise<PurchaseDraft> {
+export async function readPurchaseDetail(
+  client: PoolClient,
+  id: string,
+): Promise<PurchaseRecord> {
   // Caller holds the application lock for the entire multi-table read.
   const row = (
     await client.query<
-      Omit<PurchaseDraft, "items" | "quotes" | "createdAt" | "updatedAt"> & {
+      Omit<
+        PurchaseRecord,
+        "items" | "quotes" | "createdAt" | "updatedAt" | "submittedAt"
+      > & {
         createdAt: Date;
         updatedAt: Date;
+        submittedAt: Date | null;
       }
     >(
       `SELECT ${summaryColumns},a.applicant_id AS "applicantId",a.department_id AS "departmentId",a.submitted_at AS "submittedAt",
@@ -78,9 +86,16 @@ async function detail(client: PoolClient, id: string): Promise<PurchaseDraft> {
     ...row,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    submittedAt: row.submittedAt?.toISOString() ?? null,
     items,
     quotes,
   };
+}
+async function detail(client: PoolClient, id: string): Promise<PurchaseDraft> {
+  const row = await readPurchaseDetail(client, id);
+  if (row.status !== "draft" || row.submittedAt !== null)
+    throw new ApiError(409, "NOT_DRAFT", "申请已不是草稿");
+  return { ...row, status: "draft", submittedAt: null };
 }
 const requestValues = (input: PurchaseDraftInput) => [
   input.reason,
