@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Notice } from "./ui";
+import { TravelResubmissionPanel } from "./travel-resubmission-panel";
 import { TravelDecisionPanel } from "./travel-decision-panel";
 import {
   travelStatusNames,
@@ -80,6 +81,17 @@ export function TravelDetail({
           刷新详情
         </button>
       </div>
+      {app.resubmissionOf && app.applicantId === viewerId && (
+        <Notice>
+          本申请由原申请复制重提。{" "}
+          <Link
+            href={`/travel/applications/${app.resubmissionOf}`}
+            prefetch={false}
+          >
+            查看原申请
+          </Link>
+        </Notice>
+      )}
       <section className="panel travel-section">
         <div className="section-heading">
           <h2 className="travel-long-text">{app.title}</h2>
@@ -181,6 +193,17 @@ export function TravelDetail({
           reload();
         }}
       />
+      {app.applicantId === viewerId &&
+        ["rejected", "withdrawn"].includes(app.status) && (
+          <TravelResubmissionPanel
+            key={`${id}:${app.version}`}
+            id={id}
+            version={app.version}
+            appNo={app.appNo}
+            title={app.title}
+            onBusy={setBusy}
+          />
+        )}
       <section className="panel travel-section">
         <h2>历史记录</h2>
         <ol className="travel-timeline">

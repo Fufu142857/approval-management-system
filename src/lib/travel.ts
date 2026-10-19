@@ -65,6 +65,7 @@ export type TravelDraft = TravelDraftInput & {
   id: string;
   appNo: string;
   applicantId: string;
+  resubmissionOf: string | null;
   departmentId: string;
   type: "travel";
   status: "draft";

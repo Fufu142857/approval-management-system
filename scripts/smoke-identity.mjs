@@ -729,6 +729,86 @@ try {
     ).response.status,
     409,
   );
+  // Copy a terminal source without changing its history; repeats reuse the same successor.
+  const resubmissionPath = `travel-applications/${rejectedTravel.application.id}/resubmission`;
+  assert.equal(
+    (await call(resubmissionPath, "GET", undefined, head.token)).response
+      .status,
+    404,
+  );
+  assert.equal(
+    (await call(resubmissionPath, "GET", undefined, token)).body.data.successor,
+    null,
+  );
+  const copies = await Promise.all(
+    [1, 2].map(() =>
+      call(
+        resubmissionPath,
+        "POST",
+        { version: rejection.body.data.application.version },
+        token,
+      ),
+    ),
+  );
+  assert.deepEqual(
+    copies.map((item) => item.response.status).sort(),
+    [200, 201],
+  );
+  const copiedId = copies[0].body.data.successor.id;
+  assert.equal(copies[1].body.data.successor.id, copiedId);
+  const copiedDraft = (
+    await call(`travel-drafts/${copiedId}`, "GET", undefined, token)
+  ).body.data;
+  assert.equal(copiedDraft.resubmissionOf, rejectedTravel.application.id);
+  assert.equal(copiedDraft.version, 1);
+  assert.notEqual(copiedDraft.appNo, rejectedTravel.application.appNo);
+  assert.deepEqual(
+    (
+      await call(
+        `travel-applications/${copiedId}/attachments`,
+        "GET",
+        undefined,
+        token,
+      )
+    ).body.data.items,
+    [],
+  );
+  const editedCopy = await call(
+    `travel-drafts/${copiedId}`,
+    "PUT",
+    { ...travel, title: "修改后重提", version: 1 },
+    token,
+  );
+  assert.equal(editedCopy.response.status, 200);
+  const resubmitted = await call(
+    `travel-drafts/${copiedId}/submit`,
+    "POST",
+    { version: editedCopy.body.data.version },
+    token,
+  );
+  assert.equal(resubmitted.response.status, 200);
+  assert.notEqual(
+    resubmitted.body.data.workflow.id,
+    rejection.body.data.workflow.id,
+  );
+  assert.equal(
+    resubmitted.body.data.application.resubmissionOf,
+    rejectedTravel.application.id,
+  );
+  assert.deepEqual(
+    (
+      await call(
+        `travel-applications/${rejectedTravel.application.id}`,
+        "GET",
+        undefined,
+        token,
+      )
+    ).body.data,
+    rejection.body.data,
+  );
+  const relationBeforeRestart = (
+    await call(resubmissionPath, "GET", undefined, token)
+  ).body.data;
   const preview = await downloadFile(head.token, "inline");
   assert.equal(preview.status, 200);
   assert.match(preview.headers.get("content-disposition"), /^inline;/);
@@ -739,6 +819,34 @@ try {
   await server.closed;
   server = startServer();
   await ready();
+  assert.deepEqual(
+    (await call(resubmissionPath, "GET", undefined, token)).body.data,
+    relationBeforeRestart,
+  );
+  assert.deepEqual(
+    (await call(`travel-applications/${copiedId}`, "GET", undefined, token))
+      .body.data,
+    resubmitted.body.data,
+  );
+  assert.deepEqual(
+    (
+      await call(
+        `travel-applications/${rejectedTravel.application.id}`,
+        "GET",
+        undefined,
+        token,
+      )
+    ).body.data,
+    rejection.body.data,
+  );
+  const replay = await call(
+    resubmissionPath,
+    "POST",
+    { version: rejection.body.data.application.version },
+    token,
+  );
+  assert.equal(replay.response.status, 200);
+  assert.equal(replay.body.data.successor.id, copiedId);
   const persistedDownload = await downloadFile(head.token);
   assert.equal(persistedDownload.status, 200);
   assert.deepEqual(Buffer.from(await persistedDownload.arrayBuffer()), png);
@@ -762,7 +870,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; terminal records, metadata and attachment bytes survive production restart; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

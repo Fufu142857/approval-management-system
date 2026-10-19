@@ -42,3 +42,5 @@
 - account-shell.tsx：启用申请/待办入口；travel-drafts-panel.tsx 保留原管理能力并新增互通导航。
 
 运行 pnpm build 后执行 E2E_BROWSER_CHANNEL=chrome pnpm test:e2e；数据库/HTTP/浏览器测试不可并行，全部使用独立 TEST_DATABASE_URL。S5 仍停止全项目代码修改，不能将固定差旅页面扩展为人工模块的动态表单实现。
+
+S3j 已补充本人已驳回/已撤回详情的复制重提区域，按当前申请版本创建/复用关联后续，不改变原审批/撤回规则，见 WEB_TRAVEL_RESUBMISSION.md。

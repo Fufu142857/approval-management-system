@@ -1,6 +1,6 @@
 # 人工模块交接边界
 
-**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，S3f 已接入差旅草稿/附件/提交与只读详情页面；S3g 已完成固定差旅全状态及待办/已办列表后端；S3h 已接入列表与审批/撤回页面；S3i 已接入通知页面与前台轮询；下一步 S3j 差旅复制重提。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
+**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，S3f 已接入差旅草稿/附件/提交与只读详情页面；S3g 已完成固定差旅全状态及待办/已办列表后端；S3h 已接入列表与审批/撤回页面；S3i 已接入通知页面与前台轮询；S3j 已完成差旅复制重提；下一步 S4a 固定采购数据模型与草稿后端。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
 
 ## 独立完成范围
 
@@ -36,7 +36,7 @@ S3c 已有 `POST /api/travel-applications/:id/tasks/:taskId/decision` 与 `POST 
 
 S3d 已有 GET /api/notifications、GET /api/notifications/:id、GET /api/notifications/unread-count、POST /api/notifications/:id/read。`src/server/notifications.ts` 导出 listNotifications(token, input)、getNotification(token, id)、unreadNotificationCount(token)、markNotificationRead(token, id)，token 为 string | undefined，id 为 UUID string，input 为 NotificationListInput；真实参数/返回与鉴权限制见 API.md。每个服务自行开事务，接收人由会话确定；直接调用前校验输入。005 仅新增未读索引，标记只更新 read_at，重复保留首次时间。
 
-通知事件本身的读取不授予正文权限，返回 target/task 为 null 时不可借通知访问正文；apiPath 指向现有鉴权 API；S3i 从受控 target.type/id 映射到既有差旅详情页。状态与正文跳转后仍需重新读取验证。待办/已办与全状态申请列表 API 已由 S3g 实现；S3h 已接入列表与审批/撤回 UI；S3i 已接入通知 UI 与轮询；复制重提接口仍**未实现**，现有能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
+通知事件本身的读取不授予正文权限，返回 target/task 为 null 时不可借通知访问正文；apiPath 指向现有鉴权 API；S3i 从受控 target.type/id 映射到既有差旅详情页。状态与正文跳转后仍需重新读取验证。待办/已办与全状态申请列表 API 已由 S3g 实现；S3h 已接入列表与审批/撤回 UI；S3i 已接入通知 UI 与轮询；S3j 已有固定差旅复制重提接口（见下文），现有能力不等于自定义模块已可完整接入。代码风格统一在 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 S3e 已有固定差旅附件 API，完整路径/返回见 API.md。`src/server/travel-attachments.ts` 导出 `uploadTravelAttachment(token, id, version, bytes: Buffer, filename, declaredType)`、`listTravelAttachments(token, id)`、`deleteTravelAttachment(token, id, attachmentId, version)`、`getTravelAttachmentContent(token, id, attachmentId)`；token 为 string | undefined，ID/filename/declaredType 为 string，version 为 number，各自开事务。直接调用前校验 UUID/version；HTTP 上传在读正文前还会调用 authorizeAttachmentUpload，实际写入再次鉴权。类型/常量在 `src/lib/attachments.ts`，格式解析在 attachment-validation.ts，私有存储/完整性检查/回收在 attachment-storage.ts。
 
@@ -77,3 +77,7 @@ S3h 页面接入见 WEB_TRAVEL_APPROVAL.md，接口和迁移不变。travel-list
 到 S5 后 AI 停止所有代码修改并交棒。用户完成独立提交并明确要求继续后，再开展允许范围内的后续工作。
 
 S3i 页面见 WEB_NOTIFICATIONS.md。notification-panels.tsx 复用 S3d 通知 API；use-foreground-resource.ts 管理串行读取、隐藏取消、恢复/卸载、超时与旧数据提示；AccountShell 提供未读数与退出暂停上下文。无需新迁移，无动态模板功能。
+
+S3j 新增 GET/POST /api/travel-applications/:id/resubmission。src/server/travel-resubmission.ts 导出 getTravelResubmission(token: string | undefined, id: string): Promise<TravelResubmission> 与 copyTravelForResubmission(token: string | undefined, id: string, version: number): Promise<TravelResubmissionResult>；类型在 src/lib/travel-resubmission.ts。服务自行开事务；直接调用前校验 UUID/version。GET 返回 sourceId/successor（可空），POST 返回 sourceId/successor/created；HTTP 新建 201、复用 200。只有本人 rejected/withdrawn 可调用，POST 先核原版本再复用。
+
+008 为 applications 增加不可变 resubmission_of 自外键与唯一约束；TravelDraft/TravelApplication 的 resubmissionOf 为 string | null。锁顺序为组织/身份/部门 → 原申请 → 已有后续；不改旧申请/审批记录，不复制附件/任务/日志/通知，新草稿使用当前部门，提交重新校验。删除未提交后续允许重建；已提交后续不能覆盖，再次重提从该后续继续。来源关联不授予额外正文权限。UI 在不确定写入后只 GET 核对，不自动重放 POST；详见 API.md、DATABASE.md 与 WEB_TRAVEL_RESUBMISSION.md。此服务仅支持固定差旅。

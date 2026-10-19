@@ -1,6 +1,6 @@
 # 身份、组织与固定差旅 HTTP 接口
 
-S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；S3h 已接入这些列表及审批/撤回页面（见 WEB_TRAVEL_APPROVAL.md）；S3i 已接入通知页面与前台轮询（见 WEB_NOTIFICATIONS.md），尚无自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
+S2b 身份接口由 S2c Web 页面接入；S3a 提供差旅草稿，S3b 提供固定差旅提交与提交后详情。S3c 增加通过/驳回/撤回操作与已办详情权限；S3d 增加本人通知列表/详情/未读数/已读接口；S3e 增加受控差旅附件接口；S3f 已接入差旅草稿/附件/提交与只读详情页面（见 WEB_TRAVEL.md），S3g 新增本人全状态申请与待办/已办列表 API；S3h 已接入这些列表及审批/撤回页面（见 WEB_TRAVEL_APPROVAL.md）；S3i 已接入通知页面与前台轮询（见 WEB_NOTIFICATIONS.md），S3j 新增固定差旅复制重提 GET/POST（见本文末节）；尚无自定义流程接口。验收状态见 [STATUS.md](STATUS.md)，身份页面与浏览器验证见 [WEB_IDENTITY.md](WEB_IDENTITY.md)。除附件内容成功返回二进制外，其余成功响应为 `{ "data": ... }`，错误为 `{ "error": { "code", "message", "fieldErrors"? } }`；全部响应禁止缓存。
 
 ## 会话与请求约定
 
@@ -271,3 +271,20 @@ GET 不写审批日志、不改变通知已读状态或申请版本。审批/撤
 - `src/server/notification-handlers.ts`：四个 HTTP 处理器；`tests/notifications.test.ts` 包含 12 项通知验收，HTTP 脚本验证生产路径及阅读时间重启保留。
 
 实现参考：[OWASP 会话管理](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)、[node-postgres 事务](https://node-postgres.com/features/transactions)、[Zod 输入校验](https://zod.dev/api)。
+
+## S3j 固定差旅复制重提
+
+| 方法与路径                                     | 输入                                                             | 成功 data                                                                              |
+| ---------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| GET /api/travel-applications/:id/resubmission  | UUID；不接受查询参数                                             | `{ sourceId, successor: null 或 { id, appNo, status, version } }`                      |
+| POST /api/travel-applications/:id/resubmission | UUID；JSON 严格 `{ version }`，整数 1–2147483647；不接受查询参数 | `{ sourceId, successor: { id, appNo, status, version }, created }`；新建 201，复用 200 |
+
+两个接口仅有效 active 会话/部门下的原申请本人可用。其他人（含历史审批人/管理员）或不存在的来源均 404；非 rejected/withdrawn 返回 409 NOT_RESUBMITTABLE。POST 原申请版本不符返回 409 VERSION_CONFLICT，即使已有后续也先校验；明细缺失返回 409 SOURCE_INCOMPLETE 并回滚主表插入。未登录/会话无效 401，身份或部门不可用 403，UUID/正文/查询非法 400，Cookie 写入仍需同源 Origin。
+
+同一原申请只保留一个直接后续记录，重复或并发 POST 返回已有记录的当前摘要，不覆盖其字段、版本、状态或附件。未提交后续草稿删除后可重新复制；已提交后续不能删除覆盖，后续再次驳回/撤回则以它为新的来源。不是跨删除的永久幂等键；客户端不自动重放不确定写入，先 GET 核对。
+
+新建事务复制原差旅的固定表单内容，新 ID/编号、version=1、draft、submittedAt=null，采用当前会话申请人及当前部门；不复制附件、审批任务/决定/快照/日志/通知。原数据与原版本/时间保持不变。提交仍使用既有 /travel-drafts/:id/submit 重新校验并生成新的固定流程。
+
+TravelDraft / TravelApplication（及草稿列表）新增 `resubmissionOf: UUID | null`，仅表达来源，普通创建/替换接口拒绝同名输入，数据库禁止改写。GET 来源关系也不扩大正文权限；新旧申请分别按原有授权规则读取，客户端不得凭来源 ID 假定能读取原附件。全状态申请/任务摘要接口没有新增此字段。
+
+实现：src/lib/travel-resubmission.ts 定义 TravelSuccessor/TravelResubmission/TravelResubmissionResult；src/server/travel-resubmission.ts 导出 getTravelResubmission(token: string | undefined, id: string)、copyTravelForResubmission(token: string | undefined, id: string, version: number)，均自行开事务，直接服务调用前须校验 UUID/version。迁移 008 和 UI 说明见 WEB_TRAVEL_RESUBMISSION.md。

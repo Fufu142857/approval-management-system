@@ -19,7 +19,7 @@ type DraftRow = Omit<TravelDraft, "createdAt" | "updatedAt"> & {
   updatedAt: Date;
 };
 export const travelColumns = `a.id,a.app_no AS "appNo",a.title,a.applicant_id AS "applicantId",
-  a.department_id AS "departmentId",a.type,a.status,a.version,
+  a.department_id AS "departmentId",a.resubmission_of AS "resubmissionOf",a.type,a.status,a.version,
   a.created_at AS "createdAt",a.updated_at AS "updatedAt",a.submitted_at AS "submittedAt",
   t.departure,t.destination,t.start_date::text AS "startDate",t.end_date::text AS "endDate",
   t.purpose,t.companions,t.transportation,t.budget::text,t.remarks,t.duration_days AS "durationDays"`;

@@ -44,3 +44,5 @@
 运行顺序：pnpm build，然后 E2E_BROWSER_CHANNEL=chrome pnpm test:e2e。测试会重置独立 TEST_DATABASE_URL，不能与 pnpm test 或 pnpm test:http 并行。浏览器用例覆盖真实提交/附件路径；模拟响应丢失、附件不可用、无审批人仅用于检查页面反馈，后端真实失败规则由既有数据库测试覆盖。实际执行结果与修正记录见 DEVELOPMENT_LOG.md。
 
 PDF 渲染使用 [Mozilla 官方示例](https://mozilla.github.io/pdf.js/examples/) 与 [API 参数说明](https://mozilla.github.io/pdf.js/api/draft/module-pdfjsLib.html)，仅渲染既有附件内容，不涉及人工动态表单模块。
+
+S3j 为重提草稿和提交详情增加原申请链接与附件重新上传提示；本人已驳回/已撤回详情可确认复制并查看已有后续。原记录保持只读，规则见 WEB_TRAVEL_RESUBMISSION.md。
