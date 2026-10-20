@@ -391,7 +391,7 @@ tasks 按 seqNo 排序，包含 id/seqNo/name/approverId/status/createdAt/activa
 
 通知继续使用既有本人通知接口，采购待办事件 target.type=purchase，apiPath=/api/purchase-applications/:id，task 为当前实际任务状态；目标仍独立按正文权限校验。现有通知页面可显示事件和状态，但只为已接入的差旅类型展示页面链接，采购页面跳转留待后续，不将 API 地址当页面地址。
 
-实现入口：purchase-submission.ts 的 submitPurchaseDraft(token, id, version) / getPurchaseApplication(token, id) 自行开事务；参数类型分别 string | undefined、string、number。purchase-attachments.ts 新增 listSubmittedPurchaseAttachments(token, id) / getSubmittedPurchaseAttachmentContent(token, id, attachmentId)，自行开事务。直接调用前校验 UUID/version。purchase-access.ts 的 lockSubmittedPurchase(client, id, actorId) 只可用于已完成 requireBusinessActor 的事务；readPurchaseDetail(client, id) 不自行鉴权，调用方必须先授权并持申请锁。PurchaseRecord 位于 src/lib/purchase.ts；固定提交校验位于 purchase-submission-validation.ts。S4d 已补采购审批/撤回（见下节）；采购重提、列表或 Web 页面尚未实现，不包含自定义模板解释。
+实现入口：purchase-submission.ts 的 submitPurchaseDraft(token, id, version) / getPurchaseApplication(token, id) 自行开事务；参数类型分别 string | undefined、string、number。purchase-attachments.ts 新增 listSubmittedPurchaseAttachments(token, id) / getSubmittedPurchaseAttachmentContent(token, id, attachmentId)，自行开事务。直接调用前校验 UUID/version。purchase-access.ts 的 lockSubmittedPurchase(client, id, actorId) 只可用于已完成 requireBusinessActor 的事务；readPurchaseDetail(client, id) 不自行鉴权，调用方必须先授权并持申请锁。PurchaseRecord 位于 src/lib/purchase.ts；固定提交校验位于 purchase-submission-validation.ts。S4d 已补采购审批/撤回（见下节）；S4e 列表见后文；采购重提或 Web 页面尚未实现，不包含自定义模板解释。
 
 ## S4d 固定采购通过、驳回与撤回
 
@@ -421,3 +421,24 @@ id/taskId 为 UUID，version 为最新正整数；opinion trim 后最多 2000 �
 重复请求、相反审批、审批与撤回竞争只有一个合法版本变更成功；同人负责两步也必须使用第二步 taskId 和新 version。409 或不确定网络结果后先 GET 最新详情/通知核对，不能自动刷新版本重放 POST；历史来源不自动授予新申请权限。
 
 实现：src/lib/purchase-actions.ts 导出 purchaseDecisionSchema / purchaseWithdrawalSchema、PurchaseDecisionInput / PurchaseWithdrawalInput。src/server/purchase-actions.ts 导出 decidePurchaseTask(token: string | undefined, id: string, taskId: string, input: PurchaseDecisionInput) 与 withdrawPurchaseApplication(token, id, input: PurchaseWithdrawalInput)，各自开事务返回 S4c 详情。直接调用前需通过对应 schema 和 UUID 校验。HTTP 边界在 purchase-action-handlers.ts；只执行固定采购已冻结的任务，不解释自定义模板/字段/发布规则。无新迁移，现有 010 数据库可用。
+
+## S4e 固定采购本人申请、待办与已办列表
+
+| 方法与路径                     | 范围                                                           | 返回 data                                                        |
+| ------------------------------ | -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| GET /api/purchase-applications | 当前用户本人采购，含 draft/pending/approved/rejected/withdrawn | `{ items: PurchaseApplicationSummary[], total, page, pageSize }` |
+| GET /api/purchase-tasks        | 当前实际待办；state=handled 时为本人已通过/驳回任务            | `{ items: PurchaseTaskSummary[], total, page, pageSize, state }` |
+
+两接口共用可选查询：page（默认 1，1–100000）、pageSize（默认 20，1–100）、type（仅 purchase，默认 purchase）、status（默认 all 或上述申请状态）、keyword（trim 后最多 200 字符，默认空）、from/to（有效 YYYY-MM-DD，0001–9999 年，可只传一端，from 不得晚于 to）。任务接口另收 state=pending（默认）或 handled；申请接口不接受 state。未知/重复参数、非法页码/日期/type/status/state 或申请人/部门/角色等身份注入均为 400 VALIDATION_ERROR；不接受 type=all/travel。
+
+keyword 对标题或编号做不区分大小写的字面量包含匹配，%/_ 不是通配符。from/to 按上海日历日包含首尾：本人申请筛选 createdAt，pending 任务筛选 activatedAt，handled 筛选 finishedAt；不因修改草稿 updatedAt 改变创建日筛选。排序对应时间倒序，再按申请 ID 或任务 ID 升序，平局稳定。越界页返回空 items，total 仍为全部符合过滤条件的条目数；total 不是分页内数量，也不是业务统计金额。
+
+申请摘要包括 id/appNo/type/title/status/version、budgetLimit/totalAmount（两位小数字符串或 null）、singleSource、applicant（id/name/departmentId/departmentName）、createdAt/updatedAt/submittedAt，以及 currentTask（当前 pending 且已激活节点的 id/seqNo/name/approver{id,name}，没有则 null）。金额沿用采购明细的数据库精确舍入合计；零条明细或任一 amount 未填返回 null，完整草稿的舍入零保留 "0.00"，不表示通过提交校验；不把预算上限或选中报价当预计总额。返回 singleSource 标记便于后续展示，具体说明、报价/附件和完整正文仍从有权限的详情读取，不在列表泄露。
+
+任务摘要含 id/seqNo/name/status（pending/approved/rejected）、activatedAt/finishedAt、application（上述完整摘要）。pending 只含本人实际任务且申请 pending、节点已激活、所有前置已通过；blocked/cancelled 不可见。handled 只含本人作过 approved/rejected 决策的任务，取消不算已办，同一人负责两步则有两行；任务 status 是原决策，application.status 是申请当前状态，例如“部门已通过，企业后续驳回”仍为 approved 任务、rejected 申请。status 查询始终筛选后者，不是任务决策结果。
+
+本人申请仅按申请人 ID，审批人/同部门/财务/企业负责人/管理员不自动获得其他申请的列表；任务列表按冻结的实际人员，角色变更不替换任务归属，申请人本人不列为审批人。业务身份校验仍要求有效会话、active 账号和有效部门（401/403）。差旅列表与采购列表互不混入，SQL 也固定业务 type，不能靠 query 切换权限。已提交申请人和当前审批人的展示姓名取不可变快照；草稿展示保存的申请人/部门当前名称。未来 blocked 人员不单独暴露。
+
+每次列表由单条 SQL 同时读取总数、分页项、金额/版本及当前节点，防止并发草稿保存/审批造成半新半旧摘要；只读查询不修改业务、审批、通知或已读状态。不同请求间可变化，offset 翻页不承诺冻结整个浏览会话。列表不锁定待办、不授予额外审批或附件权限；操作前重新 GET 详情并使用当前 taskId/version，出现冲突不得自动重放。
+
+实现：src/lib/purchase-lists.ts 导出 purchaseApplicationListSchema、purchaseTaskListSchema、purchaseStatuses，以及 PurchaseApplicationListInput、PurchaseTaskListInput、PurchaseApplicationSummary、PurchaseTaskSummary、PurchaseList<T>。src/server/purchase-lists.ts 的 listPurchaseApplications(token: string | undefined, input: PurchaseApplicationListInput) 与 listPurchaseTasks(token, input: PurchaseTaskListInput) 各自开事务并检查身份，直接调用前需 schema 校验。HTTP 边界在 purchase-list-handlers.ts。011 只新增采购本人创建时间索引；共用现有任务索引。S4e 无采购页面或统计 API；草稿专用 /api/purchase-drafts 继续按更新时间排序，与此全状态列表用途不同。

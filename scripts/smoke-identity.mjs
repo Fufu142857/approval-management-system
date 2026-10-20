@@ -1308,10 +1308,153 @@ try {
       noticeState,
     });
   }
+  // S4e lists keep ownership, task decisions and amounts separate from travel.
+  const purchaseListSnapshots = [];
+  async function listSnapshot(path, actorToken, expectedTotal) {
+    const result = await call(path, "GET", undefined, actorToken);
+    assert.equal(result.response.status, 200);
+    if (expectedTotal !== undefined)
+      assert.equal(result.body.data.total, expectedTotal);
+    purchaseListSnapshots.push({
+      path,
+      token: actorToken,
+      data: result.body.data,
+    });
+    return result.body.data;
+  }
+  const allPurchases = await listSnapshot(
+    "purchase-applications?pageSize=100",
+    token,
+    7,
+  );
+  assert.deepEqual(allPurchases.items.map((item) => item.status).sort(), [
+    "approved",
+    "draft",
+    "pending",
+    "rejected",
+    "rejected",
+    "withdrawn",
+    "withdrawn",
+  ]);
+  assert(
+    allPurchases.items.every(
+      (item) =>
+        item.type === "purchase" && typeof item.totalAmount === "string",
+    ),
+  );
+  assert.equal(
+    allPurchases.items.find((item) => item.id === purchaseId).totalAmount,
+    "0.80",
+  );
+  assert.equal(
+    allPurchases.items.find((item) => item.id === submittedPurchaseId)
+      .currentTask.approver.id,
+    head.id,
+  );
+  for (const [status, total] of [
+    ["draft", 1],
+    ["pending", 1],
+    ["approved", 1],
+    ["rejected", 2],
+    ["withdrawn", 2],
+  ])
+    await listSnapshot(`purchase-applications?status=${status}`, token, total);
+  const firstPage = await listSnapshot(
+    "purchase-applications?pageSize=2",
+    token,
+    7,
+  );
+  const nextPage = await listSnapshot(
+    "purchase-applications?pageSize=2&page=2",
+    token,
+    7,
+  );
+  assert.deepEqual(
+    [...firstPage.items, ...nextPage.items],
+    allPurchases.items.slice(0, 4),
+  );
+  assert.deepEqual(
+    (await listSnapshot("purchase-applications?pageSize=2&page=99", token, 7))
+      .items,
+    [],
+  );
+  await listSnapshot(
+    "purchase-applications?from=0001-01-01&to=9999-12-31&type=purchase",
+    token,
+    7,
+  );
+  const ownOne = await listSnapshot(
+    `purchase-applications?keyword=${purchaseSnapshot.application.appNo.toLowerCase()}`,
+    token,
+    1,
+  );
+  assert.equal(ownOne.items[0].id, submittedPurchaseId);
+  for (const actorToken of [head.token, companyHead.token, finance.token])
+    await listSnapshot("purchase-applications", actorToken, 0);
+  const currentPurchaseTasks = await listSnapshot(
+    "purchase-tasks",
+    head.token,
+    1,
+  );
+  assert.equal(currentPurchaseTasks.items[0].id, purchaseSnapshot.tasks[0].id);
+  assert.equal(currentPurchaseTasks.items[0].application.totalAmount, "0.80");
+  await listSnapshot("purchase-tasks?state=handled", head.token, 4);
+  const companyHandled = await listSnapshot(
+    "purchase-tasks?state=handled",
+    companyHead.token,
+    2,
+  );
+  assert(
+    companyHandled.items.every((item) =>
+      ["approved", "rejected"].includes(item.status),
+    ),
+  );
+  for (const actorToken of [token, companyHead.token, finance.token])
+    await listSnapshot("purchase-tasks", actorToken, 0);
+  const handledRejected = await listSnapshot(
+    "purchase-tasks?state=handled&status=rejected",
+    head.token,
+    2,
+  );
+  assert.deepEqual(handledRejected.items.map((item) => item.status).sort(), [
+    "approved",
+    "rejected",
+  ]);
+  await listSnapshot(
+    "purchase-tasks?state=handled&status=withdrawn",
+    head.token,
+    1,
+  );
+  assert.deepEqual(
+    (
+      await listSnapshot(
+        "purchase-tasks?state=handled&page=99&pageSize=1",
+        head.token,
+        4,
+      )
+    ).items,
+    [],
+  );
+  for (const path of [
+    "purchase-applications?type=travel",
+    "purchase-tasks?type=travel",
+    "purchase-tasks?page=1&page=2",
+    "purchase-applications?applicantId=" + head.id,
+  ])
+    assert.equal(
+      (await call(path, "GET", undefined, token)).response.status,
+      400,
+    );
+  assert.equal((await call("purchase-applications")).response.status, 401);
   server.child.kill("SIGTERM");
   await server.closed;
   server = startServer();
   await ready();
+  for (const listing of purchaseListSnapshots)
+    assert.deepEqual(
+      (await call(listing.path, "GET", undefined, listing.token)).body.data,
+      listing.data,
+    );
   for (const entry of purchaseTerminals) {
     assert.deepEqual(
       (await call(entry.path, "GET", undefined, token)).body.data,
@@ -1486,7 +1629,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");
