@@ -72,11 +72,13 @@ export function TravelFailure({
 }
 export function AttachmentItems({
   appId,
+  resource = "travel-applications",
   items,
   onDelete,
   disabled = false,
 }: {
   appId: string;
+  resource?: "travel-applications" | "purchase-drafts";
   items: Attachment[];
   onDelete?: (file: Attachment) => void;
   disabled?: boolean;
@@ -100,7 +102,7 @@ export function AttachmentItems({
       let response: Response;
       try {
         response = await fetch(
-          `/api/travel-applications/${appId}/attachments/${file.id}/content`,
+          `/api/${resource}/${appId}/attachments/${file.id}/content`,
           {
             credentials: "same-origin",
             cache: "no-store",

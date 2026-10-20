@@ -1243,3 +1243,187 @@ summary {
     margin-left: 0;
   }
 }
+
+/* Fixed purchase form: the two editable tables and side-by-side choice panels follow the supplied prototype. */
+.purchase-workspace,
+.purchase-sections {
+  gap: 14px;
+}
+.purchase-section {
+  padding: 18px;
+}
+.purchase-section h2 {
+  font-size: 15px;
+}
+.purchase-section > h2,
+.purchase-section > .section-heading {
+  margin-bottom: 12px;
+}
+.purchase-basic-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.purchase-extra-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+.purchase-section input[readonly] {
+  background: #f5f5f5;
+  color: #777;
+}
+.purchase-section th,
+.purchase-section td {
+  padding: 8px;
+}
+.purchase-item-table {
+  min-width: 820px;
+  table-layout: fixed;
+}
+.purchase-item-table th:nth-child(1) {
+  width: 46px;
+}
+.purchase-item-table th:nth-child(2) {
+  width: 20%;
+}
+.purchase-item-table th:nth-child(3) {
+  width: 17%;
+}
+.purchase-item-table th:nth-child(4) {
+  width: 11%;
+}
+.purchase-item-table th:nth-child(5) {
+  width: 9%;
+}
+.purchase-item-table th:nth-child(6) {
+  width: 16%;
+}
+.purchase-item-table th:last-child {
+  width: 52px;
+}
+.purchase-item-table output {
+  overflow-wrap: anywhere;
+}
+.purchase-quote-table {
+  min-width: 820px;
+  table-layout: fixed;
+}
+.purchase-quote-table th:first-child {
+  width: 46px;
+}
+.purchase-quote-table th:nth-child(2) {
+  width: 23%;
+}
+.purchase-quote-table th:nth-child(3) {
+  width: 155px;
+}
+.purchase-quote-table th:nth-child(4) {
+  width: 145px;
+}
+.purchase-quote-table th:last-child {
+  width: 52px;
+}
+.purchase-quote-evidence summary,
+.purchase-remarks summary {
+  cursor: pointer;
+  font-size: 12px;
+}
+.purchase-quote-evidence .field {
+  margin-top: 8px;
+}
+.purchase-total {
+  text-align: right;
+  font-size: 13px;
+  margin-top: 12px;
+}
+.purchase-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.purchase-choice-grid .field + .field {
+  margin-top: 10px;
+}
+.purchase-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin: 12px 0;
+}
+.purchase-bottom {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.purchase-bottom > h2 {
+  white-space: nowrap;
+}
+.purchase-upload {
+  flex: 1;
+  min-width: 0;
+}
+.purchase-upload > .field {
+  margin-bottom: 8px;
+}
+.purchase-bottom .actions {
+  flex-shrink: 0;
+}
+.purchase-file-group {
+  margin-top: 16px;
+}
+.purchase-file-group h3 {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.purchase-remarks {
+  margin: 14px 0;
+}
+.purchase-remarks .field {
+  margin-top: 8px;
+}
+@media (max-width: 1100px) {
+  .purchase-basic-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .purchase-bottom {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 700px) {
+  .purchase-basic-grid,
+  .purchase-extra-grid,
+  .purchase-choice-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .purchase-section {
+    padding: 16px;
+  }
+  .purchase-bottom {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .purchase-workspace .section-heading {
+    flex-wrap: wrap;
+  }
+  .purchase-section .table-scroll table {
+    min-width: 820px;
+  }
+}
+
+.purchase-sections {
+  min-width: 0;
+}
+.purchase-section td .icon {
+  width: 16px;
+  height: 16px;
+}
+.purchase-section .upload-zone .text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}

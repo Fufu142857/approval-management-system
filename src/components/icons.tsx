@@ -9,7 +9,9 @@ export type IconName =
   | "settings"
   | "search"
   | "user"
-  | "chevron";
+  | "chevron"
+  | "trash"
+  | "upload";
 const shapes: Record<IconName, ReactNode> = {
   grid: (
     <g fill="currentColor" stroke="none">
@@ -63,6 +65,16 @@ const shapes: Record<IconName, ReactNode> = {
       <circle cx="12" cy="8" r="4" />
       <path d="M4 23v-3a8 8 0 0 1 16 0v3Z" />
     </g>
+  ),
+  trash: (
+    <>
+      <path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M7 18H5a4 4 0 0 1-.4-8 7 7 0 0 1 13.7-2A5 5 0 0 1 19 18h-2M12 21V11m-4 4 4-4 4 4" />
+    </>
   ),
   chevron: <path d="m6 9 6 6 6-6" />,
 };

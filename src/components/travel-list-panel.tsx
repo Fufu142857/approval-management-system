@@ -37,6 +37,11 @@ export function TravelListNavigation({
         ];
   return (
     <nav className="management-tabs" aria-label="差旅列表导航">
+      {(mode === "applications" || mode === "drafts") && (
+        <Link href="/purchase/drafts" prefetch={false}>
+          采购草稿
+        </Link>
+      )}
       {items.map(([key, href, label]) => (
         <Link
           key={key}
