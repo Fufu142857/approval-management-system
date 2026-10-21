@@ -78,7 +78,8 @@ export function AttachmentItems({
   disabled = false,
 }: {
   appId: string;
-  resource?: "travel-applications" | "purchase-drafts";
+  resource?:
+    "travel-applications" | "purchase-drafts" | "purchase-applications";
   items: Attachment[];
   onDelete?: (file: Attachment) => void;
   disabled?: boolean;

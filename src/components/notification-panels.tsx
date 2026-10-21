@@ -319,15 +319,17 @@ export function NotificationDetailPanel({ id }: { id: string }) {
               通知记录发生时的事件；申请和原任务状态会随流程变化。进入申请后按最新状态与权限操作。
             </p>
             <div className="actions">
-              {item.target?.type === "travel" && !resource.error && (
-                <Link
-                  className="button"
-                  prefetch={false}
-                  href={`/travel/applications/${item.target.id}`}
-                >
-                  查看申请详情
-                </Link>
-              )}
+              {item.target &&
+                ["travel", "purchase"].includes(item.target.type) &&
+                !resource.error && (
+                  <Link
+                    className="button"
+                    prefetch={false}
+                    href={`/${item.target.type}/applications/${item.target.id}`}
+                  >
+                    查看申请详情
+                  </Link>
+                )}
               {!item.readAt && (
                 <button
                   className="button secondary"

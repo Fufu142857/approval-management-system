@@ -41,3 +41,5 @@ S4c 提交与提交后详情见 API.md；采购 fixed-purchase-v1 按用户确�
 S4e 采购列表的摘要字段和筛选在 API.md 定义：金额为数据库精确字符串/null，待办/已办按实际任务及激活/完成时间，status 筛选申请当前状态；列表总数与条目必须同一 SQL 快照。不得从角色扩大本人申请权限，也不得将取消任务计为已办。单次读取只表示查询时状态，后续写操作仍需重新核最新 taskId/version。
 
 S4f 采购 UI 约定见 WEB_PURCHASE.md：固定字段/行明确定义；PUT 只传输入字段并保留既有行 ID。金额预览先共享 schema 规范化再 BigInt 计算，不能直接拿未补零字符串调用 purchaseLineCents。附件绑定已保存报价 ID，写入递增同一申请 version；不得用文件操作的响应覆盖未保存表单。冲突或不确定写入保留输入并停止写入，人工核对后重读，不自动重试。
+
+S4g 固定采购完整字段校验集中在 src/lib/purchase-submission.ts；调用 purchaseSubmissionIssues 前必须用 purchaseDraftSchema 解析规范化。只检查字段与附件元数据，不替代服务端事务、身份、真实文件和配额验证。前端先保存当前内容，再使用返回的最新 version 提交；保存结果不确定不得继续提交，提交结果不确定须停止写入并核对详情。只读详情按版本/状态匹配正文与附件；未知报价金额明确显示无法比较。通知只对 travel/purchase 建立固定详情链接，每次进入正文/文件仍独立鉴权。

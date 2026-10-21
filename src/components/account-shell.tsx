@@ -81,7 +81,9 @@ export function AccountShell({
   const title = purchase
     ? pathname === "/purchase/drafts"
       ? "我的申请"
-      : "采购申请"
+      : pathname.startsWith("/purchase/applications/")
+        ? "采购申请详情"
+        : "采购申请"
     : notifications
       ? pathname === "/notifications"
         ? "通知中心"
@@ -100,7 +102,9 @@ export function AccountShell({
               ? "操作审计"
               : "个人信息";
   const subtitle = purchase
-    ? "填写采购信息，提交后进入审批流程"
+    ? pathname.startsWith("/purchase/applications/")
+      ? "查看采购内容、审批进度与历史记录"
+      : "填写采购信息，提交后进入审批流程"
     : notifications
       ? "查看待办与审批结果，管理阅读状态"
       : taskList

@@ -27,6 +27,9 @@ export default async function setup() {
     await database().query(
       "INSERT INTO user_roles(user_id,role_code) SELECT id,'finance_approver' FROM users WHERE username='roster_21'",
     );
+    await database().query(
+      "INSERT INTO user_roles(user_id,role_code) SELECT id,'company_head' FROM users WHERE username='roster_19'",
+    );
   } finally {
     await closeDatabase();
   }

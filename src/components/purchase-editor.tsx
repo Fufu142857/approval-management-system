@@ -12,7 +12,12 @@ import {
   type PurchaseDraft,
   type PurchaseDraftInput,
 } from "@/lib/purchase";
-import { purchaseFields, purchaseAmounts } from "@/lib/purchase-display";
+import { purchaseSubmissionIssues } from "@/lib/purchase-submission";
+import {
+  purchaseFields,
+  purchaseAmounts,
+  type PurchaseDetail,
+} from "@/lib/purchase-display";
 import type { PurchaseAttachment } from "@/lib/purchase-attachments";
 import {
   maxAttachmentBytes,
@@ -42,6 +47,7 @@ export function ExistingPurchaseEditor({
     return (
       <div className="stack">
         <TravelFailure message={draft.error || files.error!} retry={reload} />
+        <Link href={`/purchase/applications/${id}`}>查看已提交申请</Link>
         <Link href="/purchase/drafts">返回采购草稿</Link>
       </div>
     );
@@ -81,7 +87,9 @@ export function PurchaseEditor({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState(false);
-  const [confirm, setConfirm] = useState<"draft" | Attachment | null>(null);
+  const [confirm, setConfirm] = useState<
+    "submit" | "draft" | Attachment | null
+  >(null);
   const [quoteId, setQuoteId] = useState("");
   const locked = useRef(false);
   const leaving = useRef(false);
@@ -124,7 +132,7 @@ export function PurchaseEditor({
       document.removeEventListener("click", click, true);
     };
   }, [dirty, busy]);
-  async function run(work: () => Promise<void>) {
+  async function run(work: () => Promise<unknown>) {
     if (locked.current || blocked) return;
     locked.current = true;
     setBusy(true);
@@ -135,6 +143,8 @@ export function PurchaseEditor({
     } catch (error) {
       if (!handleSessionError(error)) {
         setError(errorMessage(error));
+        if (confirm === "submit")
+          setMessage("提交未确认完成，请核对错误说明和服务器记录。");
         if (error instanceof RequestError) {
           if (error.fieldErrors)
             setErrors(
@@ -173,12 +183,17 @@ export function PurchaseEditor({
     if (details) details.open = true;
     target?.focus();
   }
-  function validate() {
+  function validate(complete = false) {
     setMessage("");
     const parsed = purchaseDraftSchema.safeParse(form);
-    if (!parsed.success) {
+    const issues = parsed.success
+      ? complete
+        ? purchaseSubmissionIssues(parsed.data, files)
+        : []
+      : parsed.error.issues;
+    if (issues.length) {
       const result: Record<string, string> = {};
-      for (const issue of parsed.error.issues)
+      for (const issue of issues)
         result[issue.path.join("-")] ??= issue.message;
       setErrors(result);
       setError("请检查标出的字段后重试。");
@@ -186,12 +201,12 @@ export function PurchaseEditor({
       return;
     }
     setErrors({});
-    return parsed.data;
+    return parsed.success ? parsed.data : undefined;
   }
   async function save(data: PurchaseDraftInput) {
     if (draft && !dirty) {
       setMessage("草稿已保存。");
-      return;
+      return draft;
     }
     const saved = await api<PurchaseDraft>(
       draft ? `/purchase-drafts/${draft.id}` : "/purchase-drafts",
@@ -207,18 +222,36 @@ export function PurchaseEditor({
     setMessage("草稿已保存。");
     if (!draft)
       window.history.replaceState(null, "", `/purchase/drafts/${saved.id}`);
+    return saved;
   }
   async function confirmedAction() {
-    if (!draft) return;
+    const data = confirm === "submit" ? validate(true) : undefined;
+    if (confirm === "submit" && !data) {
+      setConfirm(null);
+      return;
+    }
     await run(async () => {
-      if (confirm === "draft") {
+      if (confirm === "submit" && data) {
+        const saved = await save(data);
+        const result = await api<PurchaseDetail>(
+          `/purchase-drafts/${saved.id}/submit`,
+          {
+            method: "POST",
+            body: JSON.stringify({ version: saved.version }),
+          },
+        );
+        leaving.current = true;
+        window.location.replace(
+          `/purchase/applications/${result.application.id}`,
+        );
+      } else if (confirm === "draft" && draft) {
         await api(`/purchase-drafts/${draft.id}`, {
           method: "DELETE",
           body: JSON.stringify({ version: draft.version }),
         });
         leaving.current = true;
         window.location.replace("/purchase/drafts");
-      } else if (confirm) {
+      } else if (confirm && typeof confirm === "object" && draft) {
         const result = await api<{ version: number }>(
           `/purchase-drafts/${draft.id}/attachments/${confirm.id}`,
           {
@@ -402,6 +435,16 @@ export function PurchaseEditor({
             >
               丢弃本地修改并重新加载
             </button>
+            {draft && (
+              <a
+                className="text-button"
+                target="_blank"
+                rel="noreferrer"
+                href={`/purchase/applications/${draft.id}`}
+              >
+                新窗口查看提交结果
+              </a>
+            )}
             <a
               className="text-button"
               target="_blank"
@@ -540,7 +583,7 @@ export function PurchaseEditor({
                   <tr>
                     <th>序号</th>
                     <th>名称 *</th>
-                    <th>规格型号</th>
+                    <th>规格型号 *</th>
                     <th>数量 *</th>
                     <th>单位 *</th>
                     <th>单价（元）*</th>
@@ -947,8 +990,11 @@ export function PurchaseEditor({
                 <button
                   className="button"
                   type="button"
-                  disabled
-                  title="采购提交页面将在下一阶段开放"
+                  onClick={() => {
+                    setError("");
+                    if (!locked.current && !blocked && validate(true))
+                      setConfirm("submit");
+                  }}
                 >
                   提交申请
                 </button>
@@ -982,8 +1028,7 @@ export function PurchaseEditor({
             </details>
             <div className="section-heading">
               <p className="hint">
-                *
-                为提交必填项，草稿可稍后补全。本阶段仅开放草稿，提交审批下一阶段接入。
+                * 为提交必填项，草稿可稍后补全。提交后表单与附件不可修改。
               </p>
               {draft && (
                 <button
@@ -1000,15 +1045,47 @@ export function PurchaseEditor({
       </form>
       {confirm && (
         <TravelDialog
-          title={confirm === "draft" ? "确认删除草稿" : "确认删除附件"}
+          title={
+            confirm === "submit"
+              ? "确认提交采购申请"
+              : confirm === "draft"
+                ? "确认删除草稿"
+                : "确认删除附件"
+          }
           close={() => setConfirm(null)}
           busy={busy}
         >
           <p>
-            {confirm === "draft"
-              ? "将删除此草稿及其全部报价和附件，此操作不能撤销。"
-              : `将删除附件“${confirm.originalName}”。`}
+            {confirm === "submit"
+              ? "将保存当前内容并提交审批。提交后不能修改表单或附件。"
+              : confirm === "draft"
+                ? "将删除此草稿及其全部报价和附件，此操作不能撤销。"
+                : `将删除附件“${confirm.originalName}”。`}
           </p>
+          {confirm === "submit" && (
+            <dl className="travel-details">
+              <div className="travel-span">
+                <dt>申请</dt>
+                <dd>
+                  {draft?.appNo ?? "保存时分配编号"} · {form.title}
+                </dd>
+              </div>
+              <div>
+                <dt>预计总额</dt>
+                <dd>{amounts.total} 元</dd>
+              </div>
+              <div>
+                <dt>拟选供应商</dt>
+                <dd>
+                  {form.quotes.find((quote) => quote.selected)?.supplierName}
+                </dd>
+              </div>
+              <div className="travel-span">
+                <dt>审批路径</dt>
+                <dd>部门负责人 → 企业负责人（实际人员提交时确定）</dd>
+              </div>
+            </dl>
+          )}
           <div className="actions">
             <button
               type="button"
@@ -1024,7 +1101,11 @@ export function PurchaseEditor({
               disabled={busy}
               onClick={() => void confirmedAction()}
             >
-              {busy ? "处理中…" : "确认删除"}
+              {busy
+                ? "处理中…"
+                : confirm === "submit"
+                  ? "确认提交"
+                  : "确认删除"}
             </button>
           </div>
         </TravelDialog>

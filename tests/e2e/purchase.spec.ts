@@ -114,7 +114,7 @@ test("采购填写与精确金额、稳定行 ID、报价附件绑定及原文�
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "提交申请", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await expect(page.getByLabel("选择报价附件")).toBeDisabled();
   await page.locator("#title").fill(input.title);
   await save(page);

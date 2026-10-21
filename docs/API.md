@@ -389,9 +389,9 @@ tasks 按 seqNo 排序，包含 id/seqNo/name/approverId/status/createdAt/activa
 
 提交后正文/附件授权一致：当前有效申请人或曾激活任务的实际人员可读；未激活的企业负责人、其他同角色人员、财务和管理员均无额外权限。先锁申请 FOR SHARE，再用新语句检查授权，直到正文/任务/日志/文件字节读取完成；以后状态写操作须沿用相同申请行锁。提交后文件仅可读，无新增上传/删除路径。
 
-通知继续使用既有本人通知接口，采购待办事件 target.type=purchase，apiPath=/api/purchase-applications/:id，task 为当前实际任务状态；目标仍独立按正文权限校验。现有通知页面可显示事件和状态，但只为已接入的差旅类型展示页面链接，采购页面跳转留待后续，不将 API 地址当页面地址。
+通知继续使用既有本人通知接口，采购待办事件 target.type=purchase，apiPath=/api/purchase-applications/:id，task 为当前实际任务状态；目标仍独立按正文权限校验。S4g 通知页面已为受控 travel/purchase 目标展示对应详情链接，不将 apiPath 当页面地址；目标不可访问或当前读取失败时隐藏跳转，进入正文/文件继续独立鉴权。
 
-实现入口：purchase-submission.ts 的 submitPurchaseDraft(token, id, version) / getPurchaseApplication(token, id) 自行开事务；参数类型分别 string | undefined、string、number。purchase-attachments.ts 新增 listSubmittedPurchaseAttachments(token, id) / getSubmittedPurchaseAttachmentContent(token, id, attachmentId)，自行开事务。直接调用前校验 UUID/version。purchase-access.ts 的 lockSubmittedPurchase(client, id, actorId) 只可用于已完成 requireBusinessActor 的事务；readPurchaseDetail(client, id) 不自行鉴权，调用方必须先授权并持申请锁。PurchaseRecord 位于 src/lib/purchase.ts；固定提交校验位于 purchase-submission-validation.ts。S4d 已补采购审批/撤回（见下节）；S4e 列表见后文；采购重提或 Web 页面尚未实现，不包含自定义模板解释。
+实现入口：purchase-submission.ts 的 submitPurchaseDraft(token, id, version) / getPurchaseApplication(token, id) 自行开事务；参数类型分别 string | undefined、string、number。purchase-attachments.ts 新增 listSubmittedPurchaseAttachments(token, id) / getSubmittedPurchaseAttachmentContent(token, id, attachmentId)，自行开事务。直接调用前校验 UUID/version。purchase-access.ts 的 lockSubmittedPurchase(client, id, actorId) 只可用于已完成 requireBusinessActor 的事务；readPurchaseDetail(client, id) 不自行鉴权，调用方必须先授权并持申请锁。PurchaseRecord 位于 src/lib/purchase.ts；固定提交校验位于 purchase-submission-validation.ts。S4d 已补采购审批/撤回（见下节）；S4e 列表见后文；S4f/S4g 已接入采购草稿/附件/提交/只读详情，采购重提及审批/列表页面仍未实现，不包含自定义模板解释。
 
 ## S4d 固定采购通过、驳回与撤回
 
@@ -442,3 +442,7 @@ keyword 对标题或编号做不区分大小写的字面量包含匹配，%/_ �
 每次列表由单条 SQL 同时读取总数、分页项、金额/版本及当前节点，防止并发草稿保存/审批造成半新半旧摘要；只读查询不修改业务、审批、通知或已读状态。不同请求间可变化，offset 翻页不承诺冻结整个浏览会话。列表不锁定待办、不授予额外审批或附件权限；操作前重新 GET 详情并使用当前 taskId/version，出现冲突不得自动重放。
 
 实现：src/lib/purchase-lists.ts 导出 purchaseApplicationListSchema、purchaseTaskListSchema、purchaseStatuses，以及 PurchaseApplicationListInput、PurchaseTaskListInput、PurchaseApplicationSummary、PurchaseTaskSummary、PurchaseList<T>。src/server/purchase-lists.ts 的 listPurchaseApplications(token: string | undefined, input: PurchaseApplicationListInput) 与 listPurchaseTasks(token, input: PurchaseTaskListInput) 各自开事务并检查身份，直接调用前需 schema 校验。HTTP 边界在 purchase-list-handlers.ts。011 只新增采购本人创建时间索引；共用现有任务索引。S4e 无采购页面或统计 API；草稿专用 /api/purchase-drafts 继续按更新时间排序，与此全状态列表用途不同。
+
+## S4g Web 接入说明
+
+HTTP 方法、正文、状态码及响应不变，无新迁移。固定字段校验从服务端提取至 src/lib/purchase-submission.ts 的 purchaseSubmissionIssues，Web 和事务内提交均先通过 purchaseDraftSchema 规范化再调用；服务端保留实际数据/附件查询、原文件完整性、配额/关联及审批人检查。前端本地校验不授予提交权限。保存与提交是两个请求，分别使用各自最新 version，保存成功不等于提交成功；超时/丢失响应先读真实状态，不自动重放。具体页面和边界见 WEB_PURCHASE.md。

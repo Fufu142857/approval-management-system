@@ -1427,3 +1427,27 @@ summary {
   justify-content: center;
   gap: 8px;
 }
+
+.purchase-readonly table {
+  min-width: 700px;
+  table-layout: fixed;
+}
+.purchase-readonly td {
+  overflow-wrap: anywhere;
+}
+.purchase-readonly td .badge,
+.purchase-readonly td .text-button {
+  display: block;
+  margin: 4px 0;
+}
+.purchase-readonly .section-heading {
+  flex-wrap: wrap;
+}
+.purchase-readonly .section-heading strong,
+.purchase-readonly .section-heading h2 {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.purchase-readonly .travel-details dd {
+  overflow-wrap: anywhere;
+}
