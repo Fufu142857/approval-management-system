@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { PurchaseListNavigation } from "./purchase-list-panel";
 import { useState } from "react";
 import type { PurchaseDraftSummary } from "@/lib/purchase";
 import type { PageResult } from "@/lib/identity-display";
@@ -19,12 +20,7 @@ export function PurchaseDraftsPanel() {
   );
   return (
     <div className="stack">
-      <nav className="management-tabs" aria-label="申请导航">
-        <Link href="/travel/applications">差旅申请</Link>
-        <Link href="/purchase/drafts" aria-current="page">
-          采购草稿
-        </Link>
-      </nav>
+      <PurchaseListNavigation mode="drafts" />
       <div className="page-heading">
         <div>
           <h2>采购草稿</h2>

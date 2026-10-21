@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
+import { PurchaseDecisionPanel } from "./purchase-decision-panel";
 import {
   purchaseLink,
   type PurchaseDetail as Detail,
@@ -19,7 +21,16 @@ type FileList = {
   version: number;
   status: string;
 };
-export function PurchaseDetail({ id }: { id: string }) {
+export function PurchaseDetail({
+  id,
+  viewerId,
+}: {
+  id: string;
+  viewerId: string;
+}) {
+  const [opinion, setOpinion] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
   const detail = useResource<Detail>(`/purchase-applications/${id}`);
   const files = useResource<FileList>(
     `/purchase-applications/${id}/attachments`,
@@ -32,15 +43,19 @@ export function PurchaseDetail({ id }: { id: string }) {
     return (
       <div className="stack">
         <TravelFailure message={detail.error || files.error!} retry={reload} />
-        <Link href={`/purchase/drafts/${id}`}>查看本人草稿</Link>
+        <Link href="/purchase/applications">返回我的采购申请</Link>
+        <Link href="/purchase/tasks">返回我的采购待办</Link>
         <Link href="/notifications">返回通知中心</Link>
       </div>
     );
   if (!detail.data || !files.data)
     return (
-      <p className="empty-state" role="status">
-        正在加载采购申请…
-      </p>
+      <div className="stack">
+        {message && <Notice>{message}</Notice>}
+        <p className="empty-state" role="status">
+          正在加载采购申请…
+        </p>
+      </div>
     );
   const { application: app, workflow, tasks, logs } = detail.data;
   if (app.version !== files.data.version || app.status !== files.data.status)
@@ -61,16 +76,26 @@ export function PurchaseDetail({ id }: { id: string }) {
           .name ?? "历史操作人");
   return (
     <div className="stack purchase-workspace purchase-readonly">
+      {message && <Notice>{message}</Notice>}
       <div className="section-heading">
         <div className="actions">
-          <Link className="text-button" href="/purchase/drafts">
-            ← 采购草稿
+          <Link
+            className="text-button"
+            href={
+              app.applicantId === viewerId
+                ? "/purchase/applications"
+                : "/purchase/tasks"
+            }
+          >
+            {app.applicantId === viewerId
+              ? "← 返回我的采购申请"
+              : "← 返回我的采购待办"}
           </Link>
           <Link className="text-button" href="/notifications">
             通知中心
           </Link>
         </div>
-        <button className="button secondary" onClick={reload}>
+        <button className="button secondary" disabled={busy} onClick={reload}>
           刷新详情
         </button>
       </div>
@@ -289,6 +314,7 @@ export function PurchaseDetail({ id }: { id: string }) {
             <AttachmentItems
               appId={id}
               resource="purchase-applications"
+              disabled={busy}
               items={files.data!.items.filter(
                 (file) => file.quoteId === quote.id,
               )}
@@ -296,6 +322,19 @@ export function PurchaseDetail({ id }: { id: string }) {
           </div>
         ))}
       </section>
+      <PurchaseDecisionPanel
+        detail={detail.data}
+        viewerId={viewerId}
+        opinion={opinion}
+        onOpinion={setOpinion}
+        onBusy={setBusy}
+        reload={reload}
+        onDone={(value) => {
+          setOpinion("");
+          setMessage(value);
+          reload();
+        }}
+      />
       <section className="panel purchase-section">
         <h2>审批进度</h2>
         <p className="hint">部门负责人 → 企业负责人 · 提交时确定的实际人员</p>

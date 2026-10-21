@@ -446,3 +446,7 @@ keyword 对标题或编号做不区分大小写的字面量包含匹配，%/_ �
 ## S4g Web 接入说明
 
 HTTP 方法、正文、状态码及响应不变，无新迁移。固定字段校验从服务端提取至 src/lib/purchase-submission.ts 的 purchaseSubmissionIssues，Web 和事务内提交均先通过 purchaseDraftSchema 规范化再调用；服务端保留实际数据/附件查询、原文件完整性、配额/关联及审批人检查。前端本地校验不授予提交权限。保存与提交是两个请求，分别使用各自最新 version，保存成功不等于提交成功；超时/丢失响应先读真实状态，不自动重放。具体页面和边界见 WEB_PURCHASE.md。
+
+## S4h Web 列表与审批接入
+
+HTTP 契约及数据库迁移不变。/purchase/applications、/purchase/tasks、/purchase/tasks/handled 分别调用既有采购本人/待办/已办接口；URL 与金额/状态语义保持上述规则，类型切换进入对应独立业务页面。/purchase/applications/:id 现可按当前实际身份执行既有 decision/withdraw；客户端只提交 version、decision/opinion 及路径 taskId，不提交审批人。确认取消不写入；409/404 或不确定结果停写重读，不重放。完整入口、刷新/意见保留与权限说明见 WEB_PURCHASE_APPROVAL.md。复制重提仍仅差旅已有，采购接口尚未实现。

@@ -346,6 +346,7 @@ test("采购提交响应丢失与双窗口竞争，停写并核对实际提交�
   });
   await submit(page);
   await expect(button(page, "提交申请")).toBeDisabled();
+  await expect(page.getByText(/结果可能已变化。当前输入仍保留/)).toBeVisible();
   await expect(page.locator("#title")).toHaveValue(draft.title);
   expect(submits).toBe(1);
   expect((await detail(page, draft.id)).application.status).toBe("pending");
@@ -382,6 +383,7 @@ test("保存响应丢失时不得继续提交，服务端字段错误不冒充�
   await page.locator("#title").fill("仍需核对的内容");
   await submit(page);
   await expect(button(page, "提交申请")).toBeDisabled();
+  await expect(page.getByText(/结果可能已变化。当前输入仍保留/)).toBeVisible();
   expect(submits).toBe(0);
   await expect(page.locator("#title")).toHaveValue("仍需核对的内容");
   await page.unroute(`**/api/purchase-drafts/${draft.id}`);

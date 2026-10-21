@@ -1,5 +1,6 @@
-import { test, expect, type Page, type Browser } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import type { TravelDetail } from "../../src/lib/travel-display";
+import { businessActor as actor } from "./business-actor";
 const headers = { Origin: "http://127.0.0.1:3101" };
 async function signIn(page: Page, username: string) {
   await page.goto("/login");
@@ -7,12 +8,6 @@ async function signIn(page: Page, username: string) {
   await page.getByLabel("密码", { exact: true }).fill("Browser-test-password");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page).toHaveURL(/\/account$/);
-}
-async function actor(browser: Browser, username: string) {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await signIn(page, username);
-  return { page, close: () => context.close() };
 }
 async function create(page: Page, title: string, submit = true) {
   const saved = await page.request.post("/api/travel-drafts", {
@@ -230,6 +225,9 @@ test("审批写入响应丢失不重发，刷新核对真实结果", async ({ pa
     await button(head.page, "通过审批").click();
     await button(head.page, "确认通过").click();
     await expect(button(head.page, "通过审批")).toBeDisabled();
+    await expect(
+      head.page.getByText(/状态或写入结果可能已变化，已暂停操作/),
+    ).toBeVisible();
     await expect(head.page.getByLabel("审批意见（驳回必填）")).toHaveValue(
       "只执行一次",
     );

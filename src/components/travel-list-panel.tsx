@@ -42,6 +42,18 @@ export function TravelListNavigation({
           采购草稿
         </Link>
       )}
+      <Link
+        href={
+          mode === "applications" || mode === "drafts"
+            ? "/purchase/applications"
+            : mode === "pending"
+              ? "/purchase/tasks"
+              : "/purchase/tasks/handled"
+        }
+        prefetch={false}
+      >
+        {mode === "applications" || mode === "drafts" ? "采购申请" : "采购任务"}
+      </Link>
       {items.map(([key, href, label]) => (
         <Link
           key={key}
@@ -148,8 +160,21 @@ export function TravelListPanel({
         >
           <fieldset className="travel-list-filters" disabled={navigating}>
             <Field label="申请类型" name="list-type">
-              <select id="list-type" value="travel" disabled>
+              <select
+                id="list-type"
+                value="travel"
+                onChange={() =>
+                  go(
+                    own
+                      ? "/purchase/applications"
+                      : mode === "pending"
+                        ? "/purchase/tasks"
+                        : "/purchase/tasks/handled",
+                  )
+                }
+              >
                 <option value="travel">差旅申请</option>
+                <option value="purchase">采购申请</option>
               </select>
             </Field>
             <Field label="申请状态" name="list-status">

@@ -77,13 +77,17 @@ export function AccountShell({
   const management = pathname.startsWith("/admin/");
   const purchase = pathname.startsWith("/purchase/");
   const travel = pathname.startsWith("/travel/");
-  const taskList = pathname.startsWith("/travel/tasks");
+  const taskList =
+    pathname.startsWith("/travel/tasks") ||
+    pathname.startsWith("/purchase/tasks");
   const title = purchase
-    ? pathname === "/purchase/drafts"
-      ? "我的申请"
-      : pathname.startsWith("/purchase/applications/")
-        ? "采购申请详情"
-        : "采购申请"
+    ? taskList
+      ? "我的待办"
+      : ["/purchase/drafts", "/purchase/applications"].includes(pathname)
+        ? "我的申请"
+        : pathname.startsWith("/purchase/applications/")
+          ? "采购申请详情"
+          : "采购申请"
     : notifications
       ? pathname === "/notifications"
         ? "通知中心"
@@ -102,9 +106,13 @@ export function AccountShell({
               ? "操作审计"
               : "个人信息";
   const subtitle = purchase
-    ? pathname.startsWith("/purchase/applications/")
-      ? "查看采购内容、审批进度与历史记录"
-      : "填写采购信息，提交后进入审批流程"
+    ? taskList
+      ? "处理采购审批任务，查看已办记录"
+      : ["/purchase/drafts", "/purchase/applications"].includes(pathname)
+        ? "查询本人采购申请，管理草稿与审批进度"
+        : pathname.startsWith("/purchase/applications/")
+          ? "查看采购内容、审批进度与历史记录"
+          : "填写采购信息，提交后进入审批流程"
     : notifications
       ? "查看待办与审批结果，管理阅读状态"
       : taskList
@@ -142,9 +150,13 @@ export function AccountShell({
                   className="nav-item"
                   href={
                     link.label === "我的申请"
-                      ? "/travel/applications"
+                      ? purchase
+                        ? "/purchase/applications"
+                        : "/travel/applications"
                       : link.label === "我的待办"
-                        ? "/travel/tasks"
+                        ? purchase
+                          ? "/purchase/tasks"
+                          : "/travel/tasks"
                         : "/notifications"
                   }
                   prefetch={false}

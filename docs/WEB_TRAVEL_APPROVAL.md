@@ -44,3 +44,5 @@
 运行 pnpm build 后执行 E2E_BROWSER_CHANNEL=chrome pnpm test:e2e；数据库/HTTP/浏览器测试不可并行，全部使用独立 TEST_DATABASE_URL。S5 仍停止全项目代码修改，不能将固定差旅页面扩展为人工模块的动态表单实现。
 
 S3j 已补充本人已驳回/已撤回详情的复制重提区域，按当前申请版本创建/复用关联后续，不改变原审批/撤回规则，见 WEB_TRAVEL_RESUBMISSION.md。
+
+S4h 已在列表导航和申请类型选择框接入采购对应模式，切换时进入目标业务默认查询，不混合金额或条目。差旅与采购分别使用既有 API；差旅审批/撤回逻辑未改。采购说明见 WEB_PURCHASE_APPROVAL.md，当前数据库为 011；本文前述“只有差旅/007”为 S3h 当时状态。

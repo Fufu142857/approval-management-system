@@ -1451,3 +1451,26 @@ summary {
 .purchase-readonly .travel-details dd {
   overflow-wrap: anywhere;
 }
+
+.purchase-list-workspace table {
+  min-width: 960px;
+  table-layout: fixed;
+}
+.purchase-list-workspace th,
+.purchase-list-workspace td {
+  padding: 12px 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.purchase-list-workspace th:last-child,
+.purchase-list-workspace td:last-child {
+  width: 90px;
+}
+@media (max-width: 1200px) {
+  .purchase-list-workspace .scroll-hint {
+    display: block;
+    padding: 8px 0;
+    font-size: 11px;
+    color: #888;
+  }
+}
