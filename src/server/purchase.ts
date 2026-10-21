@@ -61,7 +61,7 @@ export async function readPurchaseDetail(
         submittedAt: Date | null;
       }
     >(
-      `SELECT ${summaryColumns},a.applicant_id AS "applicantId",a.department_id AS "departmentId",a.submitted_at AS "submittedAt",
+      `SELECT ${summaryColumns},a.resubmission_of AS "resubmissionOf",a.applicant_id AS "applicantId",a.department_id AS "departmentId",a.submitted_at AS "submittedAt",
      p.reason,p.expected_date::text AS "expectedDate",p.project,p.selection_reason AS "selectionReason",
      p.single_source_reason AS "singleSourceReason",p.remarks
      FROM applications a JOIN purchase_requests p ON p.app_id=a.id WHERE a.id=$1`,

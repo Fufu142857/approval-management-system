@@ -61,3 +61,7 @@ S3j 沿用第 7、8 页公共规范，复制确认复用 TravelDialog，来源/�
 查看第 7 页公共框架及第 10 页列表/详情说明，延续第 8 页采购详情分区。采购列表使用既有白卡片、灰表头、单色筛选控件、状态胶囊与黑色主按钮；审批/撤回复用原生确认弹窗。桌面调整列宽和换行以完整显示操作，窄屏提供滚动提示；手机筛选单列且表格容器内横向滚动。通过内部导航和申请类型控件切换差旅/采购，不增设侧栏视觉主题。
 
 列表/审批弹窗仍无独立专图，不宣称逐像素复刻。真实截图检查范围及结果见 WEB_PURCHASE_APPROVAL.md、DEVELOPMENT_LOG.md；截图只在忽略的 tmp/screenshots/purchase-approval-*.png，PDF 和渲染材料不进仓库。
+
+## S4i 采购复制重提
+
+复核第 8 页采购原型；保留既有基本信息/明细/报价/并排采购选择/附件分区，只增加来源提示、终态复制面板及确认框，沿用公共黑白灰控件与 TravelDialog。没有独立重提原型，不宣称逐像素复刻。真实桌面/手机截图和交互结果见 WEB_PURCHASE_RESUBMISSION.md / DEVELOPMENT_LOG.md，截图只存忽略的 tmp/screenshots/purchase-resubmission-*.png。

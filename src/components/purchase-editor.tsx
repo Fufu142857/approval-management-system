@@ -385,6 +385,17 @@ export function PurchaseEditor({
           {draft?.appNo ?? "新建申请"} · 草稿{dirty ? " · 有未保存修改" : ""}
         </span>
       </div>
+      {draft?.resubmissionOf && (
+        <Notice>
+          这是关联原申请的重提草稿，报价附件未自动复制，请重新核对并上传。{" "}
+          <Link
+            href={`/purchase/applications/${draft.resubmissionOf}`}
+            prefetch={false}
+          >
+            查看原申请
+          </Link>
+        </Notice>
+      )}
       <noscript>
         <Notice>请启用 JavaScript 后填写与保存采购申请。</Notice>
       </noscript>

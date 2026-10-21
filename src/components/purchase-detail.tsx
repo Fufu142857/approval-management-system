@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { PurchaseResubmissionPanel } from "./purchase-resubmission-panel";
 import { PurchaseDecisionPanel } from "./purchase-decision-panel";
 import {
   purchaseLink,
@@ -99,6 +100,17 @@ export function PurchaseDetail({
           刷新详情
         </button>
       </div>
+      {app.resubmissionOf && app.applicantId === viewerId && (
+        <Notice>
+          本申请由原申请复制重提。{" "}
+          <Link
+            href={`/purchase/applications/${app.resubmissionOf}`}
+            prefetch={false}
+          >
+            查看原申请
+          </Link>
+        </Notice>
+      )}
       <section className="panel purchase-section">
         <div className="section-heading">
           <h2 className="travel-long-text">{app.title}</h2>
@@ -335,6 +347,17 @@ export function PurchaseDetail({
           reload();
         }}
       />
+      {app.applicantId === viewerId &&
+        ["rejected", "withdrawn"].includes(app.status) && (
+          <PurchaseResubmissionPanel
+            key={`${id}:${app.version}`}
+            id={id}
+            version={app.version}
+            appNo={app.appNo}
+            title={app.title}
+            onBusy={setBusy}
+          />
+        )}
       <section className="panel purchase-section">
         <h2>审批进度</h2>
         <p className="hint">部门负责人 → 企业负责人 · 提交时确定的实际人员</p>

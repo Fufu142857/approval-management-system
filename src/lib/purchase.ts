@@ -152,6 +152,7 @@ export type PurchaseDraft = Omit<PurchaseDraftInput, "items" | "quotes"> & {
   appNo: string;
   applicantId: string;
   departmentId: string;
+  resubmissionOf: string | null;
   type: "purchase";
   status: "draft";
   version: number;

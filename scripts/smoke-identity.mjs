@@ -1615,6 +1615,129 @@ try {
   assert.deepEqual(persistedAttachments.items, [attachment]);
   assert.equal(persistedAttachments.status, "pending");
   assert.equal(persistedAttachments.version, 5);
+  // S4i: copy a terminal purchase with online evidence, then verify the new chain after restart.
+  const retrySource = purchaseTerminals.find(
+    (entry) => entry.terminal.application.status === "rejected",
+  );
+  const purchaseRetryPath = `${retrySource.path}/resubmission`;
+  assert.equal(
+    (await call(purchaseRetryPath, "GET", undefined, head.token)).response
+      .status,
+    404,
+  );
+  const purchaseCopied = await call(
+    purchaseRetryPath,
+    "POST",
+    { version: retrySource.terminal.application.version },
+    token,
+  );
+  assert.equal(purchaseCopied.response.status, 201);
+  const purchaseChild = purchaseCopied.body.data.successor;
+  const childPath = `purchase-drafts/${purchaseChild.id}`;
+  const copiedPurchase = (await call(childPath, "GET", undefined, token)).body
+    .data;
+  assert.equal(
+    copiedPurchase.resubmissionOf,
+    retrySource.terminal.application.id,
+  );
+  assert.equal(copiedPurchase.version, 1);
+  assert.equal(
+    copiedPurchase.totalAmount,
+    retrySource.terminal.application.totalAmount,
+  );
+  assert.notEqual(
+    copiedPurchase.quotes[0].id,
+    retrySource.terminal.application.quotes[0].id,
+  );
+  assert.deepEqual(
+    (await call(`${childPath}/attachments`, "GET", undefined, token)).body.data
+      .items,
+    [],
+  );
+  assert.equal(
+    (await call(`${childPath}/submit`, "POST", { version: 1 }, token)).response
+      .status,
+    400,
+  );
+  const newEvidence = new FormData();
+  newEvidence.set(
+    "file",
+    new File([png], "重新上传报价.png", { type: "image/png" }),
+  );
+  newEvidence.set("version", "1");
+  const childUpload = await fetch(
+    `${origin}/api/${childPath}/quotes/${copiedPurchase.quotes[0].id}/attachments`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: newEvidence,
+    },
+  );
+  assert.equal(childUpload.status, 201);
+  const childFile = (await childUpload.json()).data.attachment;
+  const childSent = await call(
+    `${childPath}/submit`,
+    "POST",
+    { version: 2 },
+    token,
+  );
+  assert.equal(childSent.response.status, 200);
+  const purchaseRetried = childSent.body.data;
+  assert.notEqual(
+    purchaseRetried.workflow.id,
+    retrySource.terminal.workflow.id,
+  );
+  assert.deepEqual(
+    purchaseRetried.tasks.map((task) => task.status),
+    ["pending", "blocked"],
+  );
+  assert.equal(purchaseRetried.logs.length, 1);
+  const repeatedPurchaseCopy = await call(
+    purchaseRetryPath,
+    "POST",
+    { version: retrySource.terminal.application.version },
+    token,
+  );
+  assert.equal(repeatedPurchaseCopy.response.status, 200);
+  assert.equal(repeatedPurchaseCopy.body.data.created, false);
+  assert.equal(repeatedPurchaseCopy.body.data.successor.id, purchaseChild.id);
+  const purchaseRelationBefore = (
+    await call(purchaseRetryPath, "GET", undefined, token)
+  ).body.data;
+  server.child.kill("SIGTERM");
+  await server.closed;
+  server = startServer();
+  await ready();
+  assert.deepEqual(
+    (await call(purchaseRetryPath, "GET", undefined, token)).body.data,
+    purchaseRelationBefore,
+  );
+  assert.deepEqual(
+    (
+      await call(
+        `purchase-applications/${purchaseChild.id}`,
+        "GET",
+        undefined,
+        token,
+      )
+    ).body.data,
+    purchaseRetried,
+  );
+  assert.deepEqual(
+    (await call(retrySource.path, "GET", undefined, token)).body.data,
+    retrySource.terminal,
+  );
+  for (const [path, file] of [
+    [retrySource.path, retrySource.file],
+    [`purchase-applications/${purchaseChild.id}`, childFile],
+  ]) {
+    const bytes = await fetch(
+      `${origin}/api/${path}/attachments/${file.id}/content`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    assert.equal(bytes.status, 200);
+    assert.deepEqual(Buffer.from(await bytes.arrayBuffer()), png);
+  }
   assert.equal(
     (await call("auth/logout", "POST", undefined, token)).response.status,
     200,
@@ -1629,7 +1752,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; linked resubmission drafts/new execution and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");
