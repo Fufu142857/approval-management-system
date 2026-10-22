@@ -12,6 +12,10 @@ import type {
 } from "../lib/reimbursement";
 import { requireBusinessActor } from "./business-auth";
 import { transaction } from "./db";
+import {
+  lockAttachmentStorage,
+  tryCollectAttachmentGarbage,
+} from "./attachment-storage";
 import { ApiError } from "./errors";
 
 const totalSql = `(SELECT CASE WHEN count(*)>0 AND count(amount)=count(*) THEN sum(amount)::numeric(14,2)::text ELSE NULL END FROM reimbursement_items WHERE app_id=a.id)`;
@@ -135,6 +139,16 @@ async function replaceRows(
       400,
       "INVALID_ROW_ID",
       "费用明细 ID 必须来自本草稿；新明细请省略 ID",
+    );
+  const removedWithFiles = await client.query(
+    "SELECT 1 FROM attachments WHERE app_id=$1 AND reimbursement_item_id IS NOT NULL AND NOT (reimbursement_item_id=ANY($2::uuid[])) LIMIT 1",
+    [id, input.items.flatMap((row) => (row.id ? [row.id] : []))],
+  );
+  if (removedWithFiles.rowCount)
+    throw new ApiError(
+      409,
+      "ITEM_HAS_ATTACHMENTS",
+      "要删除的费用明细仍有票据，请先显式删除票据再保存",
     );
   await client.query(
     "DELETE FROM reimbursement_items WHERE app_id=$1 AND NOT (id=ANY($2::uuid[]))",
@@ -282,10 +296,12 @@ export async function deleteReimbursementDraft(
   id: string,
   version: number,
 ) {
-  return transaction(async (client) => {
+  const result = await transaction(async (client) => {
     const actor = await requireBusinessActor(token, client);
+    await lockAttachmentStorage(client);
     const current = await lockReimbursementDraft(client, id, actor.id, true);
     checkVersion(current.version, version);
+    await client.query("DELETE FROM attachments WHERE app_id=$1", [id]);
     await client.query("DELETE FROM application_links WHERE target_app_id=$1", [
       id,
     ]);
@@ -296,4 +312,6 @@ export async function deleteReimbursementDraft(
     await client.query("DELETE FROM applications WHERE id=$1", [id]);
     return { id, deleted: true };
   });
+  await tryCollectAttachmentGarbage();
+  return result;
 }

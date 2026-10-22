@@ -1,7 +1,8 @@
+import { receiptNumberSchema } from "../lib/reimbursement-attachments";
 import { maxAttachmentBytes, type Attachment } from "../lib/attachments";
 import { draftVersionSchema } from "../lib/travel";
 import { ApiError } from "./errors";
-export async function attachmentForm(request: Request) {
+export async function attachmentForm(request: Request, receipt = false) {
   const contentType = request.headers.get("content-type") || "";
   if (!/^multipart\/form-data\s*;/i.test(contentType))
     throw new ApiError(
@@ -40,14 +41,22 @@ export async function attachmentForm(request: Request) {
     throw new ApiError(400, "INVALID_MULTIPART", "上传表单格式无效");
   }
   if (
-    [...form.keys()].some((key) => !["file", "version"].includes(key)) ||
+    [...form.keys()].some(
+      (key) =>
+        !(
+          receipt ? ["file", "version", "receiptNumber"] : ["file", "version"]
+        ).includes(key),
+    ) ||
+    (receipt && form.getAll("receiptNumber").length > 1) ||
     form.getAll("file").length !== 1 ||
     form.getAll("version").length !== 1
   )
     throw new ApiError(
       400,
       "INVALID_MULTIPART",
-      "仅允许一个 file 与一个 version 字段",
+      receipt
+        ? "仅允许一个 file、一个 version 和可选的 receiptNumber 字段"
+        : "仅允许一个 file 与一个 version 字段",
     );
   const file = form.get("file");
   const version = form.get("version");
@@ -59,6 +68,9 @@ export async function attachmentForm(request: Request) {
     throw new ApiError(400, "INVALID_MULTIPART", "请提供文件和有效版本");
   return {
     file,
+    receiptNumber: receipt
+      ? receiptNumberSchema.parse(form.get("receiptNumber") ?? "")
+      : "",
     version: draftVersionSchema.parse({ version: Number(version) }).version,
   };
 }

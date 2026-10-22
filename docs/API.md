@@ -485,9 +485,9 @@ PurchaseDraft / PurchaseRecord 详情新增 `resubmissionOf: UUID | null`；草�
 
 草稿输入：title（≤200）、description/independentReason/remarks（各≤2000），默认空字符串；linkedApplicationIds（UUID 数组，最多20个，不重复，默认[]）；items（最多100条，默认[]）。每行有可选 id、新行省略；category 为 transport/lodging/meals/office/other 或 null，expenseDate 为 YYYY-MM-DD 或 null，purpose≤2000，amount 为正十进制字符串或 null，noReceipt 默认false，noReceiptReason≤2000 默认空。字符串去两端空白，金额不接受数字/负数/零/科学计数或超过两位小数，规范化为两位小数；日期限定有效公历 0001–9999 年。
 
-已填每行金额与合计不超过 999999999999.99，校验使用整数分，数据库 NUMERIC(14,2) 汇总。零行或任一行未填金额时 totalAmount=null，不以零代替；其余明细还未填完时只要金额均已填，合计即可显示。noReceiptCount 是明确选中无票的行数，既不是缺失票据数也不代表无票例外已通过。草稿允许空标题/类别/日期/用途、缺独立说明或无票原因；完整必填、每行票据/无票原因、审批流转由后续提交阶段校验，本阶段无 submit/附件接口。
+已填每行金额与合计不超过 999999999999.99，校验使用整数分，数据库 NUMERIC(14,2) 汇总。零行或任一行未填金额时 totalAmount=null，不以零代替；其余明细还未填完时只要金额均已填，合计即可显示。noReceiptCount 是明确选中无票的行数，既不是缺失票据数也不代表无票例外已通过。草稿允许空标题/类别/日期/用途、缺独立说明或无票原因；完整必填、每行票据/无票原因、审批流转由后续提交阶段校验，S4j 本身无 submit/附件接口，S4k 附件契约见下一节；提交仍未实现。
 
-PUT 是完整替换：省略字段恢复默认，省略 items/linkedApplicationIds 会清空费用/关联；保留本单行 ID 才能稳定修改和排序，新行由服务端生成 UUID。重复或跨单/未知行 ID 返回400 INVALID_ROW_ID（重复由 schema VALIDATION_ERROR）；失败时旧单整体保留。身份、部门、编号、时间、type/status/version 派生值、totalAmount、linkedApplications、resubmissionOf、票据ID等不可通过正文伪造。新建 version=1、draft、submittedAt=null、当前部门；保存刷新为当前有效部门。
+PUT 是完整替换：省略字段恢复默认，省略 items/linkedApplicationIds 会清空费用/关联（S4k 起含票据费用须先显式删文件）；保留本单行 ID 才能稳定修改和排序，新行由服务端生成 UUID。重复或跨单/未知行 ID 返回400 INVALID_ROW_ID（重复由 schema VALIDATION_ERROR）；失败时旧单整体保留。身份、部门、编号、时间、type/status/version 派生值、totalAmount、linkedApplications、resubmissionOf、票据ID等不可通过正文伪造。新建 version=1、draft、submittedAt=null、当前部门；保存刷新为当前有效部门。
 
 关联采用独立 application_links，支持最多20个本人已批准 travel/purchase 来源，返回关联按 UUID 排序，不保留选择顺序。同一来源可关联多份报销，不实施“原单只能报销一次”或累计额度规则。不存在/非本人/非已批/非两类来源统一404 LINK_NOT_AVAILABLE，不泄露他人状态。草稿读取和写入都在锁内重新核验关联所有权与状态；关联不授予任何人读取原单或报销的额外权限。源单正文、版本、审批历史、附件均不改；取消关联或删除报销不删除原单。来源异常时读取拒绝，仍可通过完整 PUT 清除关联恢复草稿。
 
@@ -496,3 +496,22 @@ ReimbursementDraft 返回输入字段及服务端 id/appNo/applicantId/departmen
 草稿列表 items 仅含 id/appNo/title/type/status/version/createdAt/updatedAt/totalAmount/noReceiptCount；候选列表 items 仅含 id/appNo/title/type/status/submittedAt/departmentId。默认page=1/pageSize=20，最大100；keyword≤200，标题/编号不区分大小写的字面包含匹配。草稿按 updatedAt DESC,id 排序；候选按 submittedAt DESC,id 排序；总数和分页单 SQL 快照，超界页返回空items及真实total。候选查询不冻结选择，保存时再次核验。
 
 类型/schema 位于 src/lib/reimbursement.ts；事务服务 src/server/reimbursement.ts 导出 createReimbursementDraft(token, input)、getReimbursementDraft(token,id)、listReimbursementDrafts(token,input)、replaceReimbursementDraft(token,id,input)、deleteReimbursementDraft(token,id,version)、listReimbursementLinkOptions(token,input)，token 为 string | undefined，id 为UUID string，输入分别为对应schema解析后的类型。lockReimbursementDraft(client,id,ownerId,write) 仅供已执行 requireBusinessActor 的事务使用。013 迁移及范围见 REIMBURSEMENT_DRAFTS.md / DATABASE.md；没有可配置字段或动态模板能力。
+
+## S4k 固定报销票据附件
+
+| 方法与路径                                                          | 输入                                                           | 成功响应                                               |
+| ------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------ |
+| POST /api/reimbursement-drafts/:id/items/:itemId/attachments        | multipart：恰好一个 file、一个 version，可选一个 receiptNumber | 201；`{ attachment, version }`                         |
+| GET /api/reimbursement-drafts/:id/attachments                       | 无查询参数                                                     | 200；`{ items, totalBytes, version, status: "draft" }` |
+| GET /api/reimbursement-drafts/:id/attachments/:attachmentId/content | disposition=inline/attachment，默认 attachment                 | 200；原始文件字节                                      |
+| DELETE /api/reimbursement-drafts/:id/attachments/:attachmentId      | 严格 JSON `{ version }`                                        | 200；`{ id, deleted: true, version }`                  |
+
+路径 ID 均为 UUID；只有有效业务身份且本人报销 draft 可调用。其他人、管理员、负责人/财务、跨类型/跨单/不存在资源返回404；失效会话401、未确认或无效部门403、非草稿409 NOT_DRAFT。上传读正文前先鉴权和检查明细归属，实际写入事务中再次检查；Cookie 写入须合法 Origin，Bearer 规则与旧接口相同。未知/重复查询、表单额外或重复字段、非法版本/号码400；不接受附件ID或外部存储键来复用已有记录。
+
+ReimbursementAttachment 为既有 Attachment 元数据加 `itemId` 和 `receiptNumber`；包含 id/appId/uploaderId/originalName/mimeType/sizeBytes/sha256/createdAt，不含私有存储键。receiptNumber 只接受字符串，去两端空白、最多100字符、拒绝控制/格式字符；省略或空白保存为 ""，不假设税务号码格式，不校验真伪。每次上传创建新票据记录，仅绑定本单一个已保存的费用明细；记录及号码不可原位改写或改绑，填错时显式删除后重新上传。号码不是唯一键，同号码/同文件的新上传不做跨单重复票据检测，不能据此声称完成增强去重。
+
+JPEG/PNG/PDF 校验实际文件内容、声明类型和文件名；单件10 MiB、整单最多9件且总计50 MiB，跨全部费用累计。multipart 总正文额外允许64 KiB开销，有界读取；拒绝超限413或不支持格式415。内容端点每次鉴权并验证文件大小/SHA-256，缺失/损坏409 ATTACHMENT_UNAVAILABLE；响应 no-store、nosniff、受控 Content-Disposition 与 sandbox CSP。文件存储在私有目录，不通过 public 暴露。
+
+上传/删除使用最新申请version并递增，旧版本409 VERSION_CONFLICT、达到上限409 VERSION_LIMIT；附件操作不会替代正文保存或改变金额/无票标记。PUT 草稿保留行ID可修改/重排，省略含票据明细返回409 ITEM_HAS_ATTACHMENTS并整体回滚；须先显式删该行所有票据，再以新版本保存。整单DELETE可按当前版本一次删除票据元数据、费用、关联和申请，提交后回收无引用文件；失败保留正文和原文件。
+
+锁顺序为组织/身份/部门 → 存储72004共享锁 → 报销申请排他锁；内容/列表持申请共享锁。存储失败、元数据/版本失败整体回滚，提交结果不确定时仅按数据库持久引用回收，不盲删文件；客户端应先重新读取，不自动重放写请求。报销提交与提交后附件授权尚未实现，草稿可以没有票据，noReceipt=true 也不绕过上传鉴权或配额。每行票据或无票原因的完整校验留待 S4l。

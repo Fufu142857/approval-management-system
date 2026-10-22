@@ -1814,13 +1814,71 @@ try {
     ).response.status,
     404,
   );
+  // S4k: real receipt multipart requests, owner-only bytes and item deletion protection.
+  const { PDFDocument } = await import("pdf-lib");
+  const receiptDocument = await PDFDocument.create();
+  receiptDocument.addPage([100, 100]);
+  const receiptPdf = Buffer.from(await receiptDocument.save());
+  const receiptJpeg = await sharp(png).jpeg().toBuffer();
+  const receiptPayloads = [
+    [png, "交通票据.png", "image/png"],
+    [receiptJpeg, "交通补充.jpg", "image/jpeg"],
+    [receiptPdf, "住宿票据.pdf", "application/pdf"],
+  ];
+  const receiptFiles = [];
+  async function uploadReceipt(version, index, actorToken = token) {
+    const [bytes, name, type] = receiptPayloads[index];
+    const body = new FormData();
+    body.set("file", new File([bytes], name, { type }));
+    body.set("version", String(version));
+    body.set("receiptNumber", `  HTTP-RECEIPT-${index + 1}  `);
+    return fetch(
+      `${origin}/api/${expensePath}/items/${expenseDraft.items[index === 2 ? 1 : 0].id}/attachments`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${actorToken}`, Origin: origin },
+        body,
+        signal: AbortSignal.timeout(10000),
+      },
+    );
+  }
+  for (let i = 0; i < 3; i++) {
+    const response = await uploadReceipt(i + 1, i);
+    assert.equal(response.status, 201);
+    const saved = (await response.json()).data;
+    assert.equal(saved.version, i + 2);
+    assert.equal(saved.attachment.receiptNumber, `HTTP-RECEIPT-${i + 1}`);
+    assert.equal(
+      saved.attachment.itemId,
+      expenseDraft.items[i === 2 ? 1 : 0].id,
+    );
+    assert.equal(saved.attachment.storageKey, undefined);
+    receiptFiles.push(saved.attachment);
+  }
+  assert.equal((await uploadReceipt(1, 0)).status, 409);
+  assert.equal((await uploadReceipt(4, 0, head.token)).status, 404);
+  for (const actorToken of [head.token, finance.token]) {
+    assert.equal(
+      (await call(`${expensePath}/attachments`, "GET", undefined, actorToken))
+        .response.status,
+      404,
+    );
+    const denied = await fetch(
+      `${origin}/api/${expensePath}/attachments/${receiptFiles[0].id}/content`,
+      { headers: { Authorization: `Bearer ${actorToken}` } },
+    );
+    assert.equal(denied.status, 404);
+  }
+  const protectedItems = await call(expensePath, "PUT", { version: 4 }, token);
+  assert.equal(protectedItems.response.status, 409);
+  assert.equal(protectedItems.body.error.code, "ITEM_HAS_ATTACHMENTS");
   const editedExpense = await call(
     expensePath,
     "PUT",
     {
       ...expenseFields,
       title: "关联报销修改后",
-      version: 1,
+      version: 4,
       items: [...expenseDraft.items].reverse(),
     },
     token,
@@ -1831,7 +1889,7 @@ try {
     expenseBeforeRestart.items.map((item) => item.id),
     expenseDraft.items.map((item) => item.id).reverse(),
   );
-  assert.equal(expenseBeforeRestart.version, 2);
+  assert.equal(expenseBeforeRestart.version, 5);
   assert.equal(
     (await call(expensePath, "PUT", { version: 1 }, token)).response.status,
     409,
@@ -1868,6 +1926,15 @@ try {
       )
     ).response.status,
     200,
+  );
+  const receiptsBeforeRestart = (
+    await call(`${expensePath}/attachments`, "GET", undefined, token)
+  ).body.data;
+  assert.deepEqual(receiptsBeforeRestart.items, receiptFiles);
+  assert.equal(receiptsBeforeRestart.version, 5);
+  assert.equal(
+    receiptsBeforeRestart.totalBytes,
+    receiptPayloads.reduce((sum, [bytes]) => sum + bytes.length, 0),
   );
   const purchaseRelationBefore = (
     await call(purchaseRetryPath, "GET", undefined, token)
@@ -1932,8 +1999,62 @@ try {
     ).body.data,
     eligible,
   );
+  assert.deepEqual(
+    (await call(`${expensePath}/attachments`, "GET", undefined, token)).body
+      .data,
+    receiptsBeforeRestart,
+  );
+  for (const [index, file] of receiptFiles.entries()) {
+    const response = await fetch(
+      `${origin}/api/${expensePath}/attachments/${file.id}/content?disposition=inline`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get("content-type"),
+      receiptPayloads[index][2],
+    );
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(
+      Buffer.from(await response.arrayBuffer()),
+      receiptPayloads[index][0],
+    );
+  }
   assert.equal(
-    (await call(expensePath, "DELETE", { version: 2 }, token)).response.status,
+    (
+      await call(
+        `${expensePath}/attachments/${receiptFiles[0].id}`,
+        "DELETE",
+        { version: 4 },
+        token,
+      )
+    ).response.status,
+    409,
+  );
+  const removedReceipt = await call(
+    `${expensePath}/attachments/${receiptFiles[0].id}`,
+    "DELETE",
+    { version: 5 },
+    token,
+  );
+  assert.equal(removedReceipt.response.status, 200);
+  assert.equal(removedReceipt.body.data.version, 6);
+  assert.equal(
+    (await call(`${expensePath}/attachments`, "GET", undefined, token)).body
+      .data.items.length,
+    2,
+  );
+  assert.equal(
+    (
+      await fetch(
+        `${origin}/api/${expensePath}/attachments/${receiptFiles[0].id}/content`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (await call(expensePath, "DELETE", { version: 6 }, token)).response.status,
     200,
   );
   assert.equal(
@@ -1959,7 +2080,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts and restart persistence; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");
