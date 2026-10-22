@@ -16,7 +16,7 @@ const targetJoins = `JOIN applications a ON a.id=n.app_id
   LEFT JOIN approval_instances i ON i.app_id=a.id
   LEFT JOIN approval_tasks t ON t.instance_id=i.id AND t.approver_id=$1
     AND n.kind='approval.pending' AND n.event_key='task:'||t.id::text||':pending'
-  CROSS JOIN LATERAL (SELECT a.type IN ('travel','purchase') AND a.status<>'draft' AND
+  CROSS JOIN LATERAL (SELECT a.type IN ('travel','purchase','reimbursement') AND a.status<>'draft' AND
     (a.applicant_id=$1 OR EXISTS (SELECT 1 FROM approval_tasks owned
       WHERE owned.instance_id=i.id AND owned.approver_id=$1 AND owned.activated_at IS NOT NULL)) AS allowed) access`;
 

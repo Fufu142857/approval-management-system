@@ -142,3 +142,11 @@ export type ReimbursementDraftSummary = Pick<
   | "totalAmount"
   | "noReceiptCount"
 >;
+
+export type ReimbursementRecord = Omit<
+  ReimbursementDraft,
+  "status" | "submittedAt"
+> & {
+  status: "draft" | "pending" | "approved" | "rejected" | "withdrawn";
+  submittedAt: string | null;
+};

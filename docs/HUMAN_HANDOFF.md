@@ -1,6 +1,6 @@
 # 人工模块交接边界
 
-**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，S3f 已接入差旅草稿/附件/提交与只读详情页面；S3g 已完成固定差旅全状态及待办/已办列表后端；S3h 已接入列表与审批/撤回页面；S3i 已接入通知页面与前台轮询；S3j 已完成差旅复制重提；S4a 已完成固定采购数据模型与草稿后端；S4b 已实现采购报价附件；S4c 已完成固定采购提交与提交后详情，S4d 已完成固定采购审批动作，S4e 已完成采购申请与任务列表后端，S4f 已接入采购草稿与报价附件页面，S4g 已接入采购提交与提交后只读详情，S4h 已接入采购列表与审批操作页面，S4i 已接入采购复制重提，S4j 已完成固定报销草稿后端，S4k 已完成报销票据附件后端，下一步 S4l 报销提交与提交后详情。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
+**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，S3f 已接入差旅草稿/附件/提交与只读详情页面；S3g 已完成固定差旅全状态及待办/已办列表后端；S3h 已接入列表与审批/撤回页面；S3i 已接入通知页面与前台轮询；S3j 已完成差旅复制重提；S4a 已完成固定采购数据模型与草稿后端；S4b 已实现采购报价附件；S4c 已完成固定采购提交与提交后详情，S4d 已完成固定采购审批动作，S4e 已完成采购申请与任务列表后端，S4f 已接入采购草稿与报价附件页面，S4g 已接入采购提交与提交后只读详情，S4h 已接入采购列表与审批操作页面，S4i 已接入采购复制重提，S4j 已完成固定报销草稿后端，S4k 已完成报销票据附件后端，S4l 已实现报销提交与提交后详情，下一步 S4m 报销审批动作。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
 
 ## 独立完成范围
 
@@ -116,8 +116,14 @@ S4j 固定报销契约在 REIMBURSEMENT_DRAFTS.md / API.md。src/lib/reimburseme
 
 src/server/reimbursement.ts 的 createReimbursementDraft(token,input)、getReimbursementDraft(token,id)、listReimbursementDrafts(token,input)、replaceReimbursementDraft(token,id,input)、deleteReimbursementDraft(token,id,version)、listReimbursementLinkOptions(token,input) 各自开事务；token 为 string | undefined，id 为UUID string，input须先用相应schema解析。lockReimbursementDraft(client: PoolClient,id:string,ownerId:string,write:boolean) 须在 requireBusinessActor 之后使用。HTTP 入口 POST/GET /api/reimbursement-drafts、GET/PUT/DELETE /api/reimbursement-drafts/:id、GET /api/reimbursement-link-options，严格输入/Origin/错误约定与旧业务一致。
 
-013 新增报销头、固定费用和 application_links；链来源仅本人已批差旅/采购，不给其他人额外权限，原单不改。写锁报销后按UUID取来源共享锁，明细/链接/版本同事务；完整PUT省略即清空，稳定行ID只属于本单。S4k 已增加票据绑定/附件保护，不能声称已有报销提交/审批/页面接口。无自定义字段或规则解释，S5 停止全项目代码修改的边界不变。
+013 新增报销头、固定费用和 application_links；链来源仅本人已批差旅/采购，不给其他人额外权限，原单不改。写锁报销后按UUID取来源共享锁，明细/链接/版本同事务；完整PUT省略即清空，稳定行ID只属于本单。S4k 已增加票据绑定/附件保护，S4l另已补提交/详情，不能声称已有报销审批动作/页面接口。无自定义字段或规则解释，S5 停止全项目代码修改的边界不变。
 
 S4k 附件真实契约见 REIMBURSEMENT_ATTACHMENTS.md / API.md。src/lib/reimbursement-attachments.ts 导出 receiptNumberSchema 与 ReimbursementAttachment（Attachment加itemId、receiptNumber）。src/server/reimbursement-attachments.ts 导出 authorizeReimbursementAttachmentUpload(token,id,itemId)、uploadReimbursementAttachment(token,id,itemId,version,bytes,filename,declaredType,receiptNumber="")、listReimbursementAttachments(token,id)、deleteReimbursementAttachment(token,id,attachmentId,version)、getReimbursementAttachmentContent(token,id,attachmentId)，均自行开事务。token:string|undefined，各ID:string/UUID，version:number，bytes:Buffer，名称/类型/号码:string；直接调用前校验UUID/version，号码在服务内再次校验。authorize是读取正文前预检，实际写入重新鉴权。
 
-上传返回{attachment,version}，列表{items,totalBytes,version,status}，删除{id,deleted:true,version}，内容服务返回{attachment,bytes}，不暴露storageKey。共享attachmentForm(request,receipt=false)只扩展固定票据的可选receiptNumber字段，旧差旅/采购模式继续严格拒绝它，不是动态字段解析器。014增加报销明细FK/号码/不可改绑触发器，当前迁移到014。报销delete已使用存储锁并提交后回收，PUT省略带票据行返回ITEM_HAS_ATTACHMENTS；调用者必须使用文件操作后的最新version。S4l才补提交及提交后读取权限，不能提前调用未实现的接口。S5全项目停写约束不变。
+上传返回{attachment,version}，列表{items,totalBytes,version,status}，删除{id,deleted:true,version}，内容服务返回{attachment,bytes}，不暴露storageKey。共享attachmentForm(request,receipt=false)只扩展固定票据的可选receiptNumber字段，旧差旅/采购模式继续严格拒绝它，不是动态字段解析器。014增加报销明细FK/号码/不可改绑触发器，当前迁移到014。报销delete已使用存储锁并提交后回收，PUT省略带票据行返回ITEM_HAS_ATTACHMENTS；调用者必须使用文件操作后的最新version。S4l已补提交及提交后读取权限，真实接口见下文。S5全项目停写约束不变。
+
+S4l真实契约见REIMBURSEMENT_SUBMISSION.md/API.md。src/lib/reimbursement.ts新增ReimbursementRecord（status五状态、submittedAt:string|null）；src/lib/reimbursement-submission.ts导出reimbursementSubmissionIssues(input:ReimbursementDraftInput,files:readonly {itemId:string}[]):z.core.$ZodIssue[]，调用前须reimbursementDraftSchema规范化，不能替代服务端授权/原文件/事务校验。
+
+src/server/reimbursement-submission.ts导出submitReimbursementDraft(token:string|undefined,id:string,version:number)、getReimbursementApplication(token,id)，自行开事务；输入UUID/version须在调用前校验。submittedReimbursementDetail(client:PoolClient,id:string,actorId:string)在已验证业务身份的事务内组合申请共享锁/授权和多表查询，返回{application,workflow,tasks,logs}。reimbursement-access.ts的lockSubmittedReimbursement(client,id,actorId)须先requireBusinessActor，只授权本人或已激活任务，返回version/status。reimbursement.ts导出readReimbursementDetail(client,id,submittedLinks?:ReimbursementLinkedApplication[]):Promise<ReimbursementRecord>，不自行授权/加申请锁：草稿/提交前不传第三参会重核来源所有权；提交后只允许传已授权实例中的冻结摘要（含空数组），不能用客户端传值。validateReimbursementSubmission(client,saved:ReimbursementRecord)重验固定字段/每行票据或无票原因、原文件与精确总额，返回totalAmount/noReceiptItems/attachmentEvidence；需在持本人申请排他锁且核完关联的事务内调用。
+
+reimbursement-attachments.ts新增listSubmittedReimbursementAttachments(token,id)、getSubmittedReimbursementAttachmentContent(token,id,attachmentId)，各自开事务，沿用S4k元数据/bytes形状。通知API类型新增reimbursement及其受控apiPath，Web尚无报销详情链接。fixed-reimbursement-v1本部门负责人→财务，当前数据库014不变；审批动作将在S4m实施，人工动态模板/规则解释仍由用户实现，到S5全项目停写。

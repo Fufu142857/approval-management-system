@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import type { z } from "zod";
 import type {
   ReimbursementDraft,
+  ReimbursementRecord,
   ReimbursementDraftInput,
   ReplaceReimbursementDraftInput,
   ReimbursementDraftSummary,
@@ -63,22 +64,25 @@ async function lockSources(client: PoolClient, ids: string[], ownerId: string) {
       "关联申请不存在或不是本人已批准的采购/差旅申请",
     );
 }
-async function detail(
+// Caller must authenticate, authorize and lock the application first.
+// Submitted reads use frozen summaries, never live source permissions or content.
+export async function readReimbursementDetail(
   client: PoolClient,
   id: string,
-  ownerId: string,
-): Promise<ReimbursementDraft> {
+  submittedLinks?: ReimbursementLinkedApplication[],
+): Promise<ReimbursementRecord> {
   // Caller holds the target lock across header, items and source information reads.
   const row = (
     await client.query<
       Omit<
-        ReimbursementDraft,
+        ReimbursementRecord,
         | "items"
         | "linkedApplications"
         | "linkedApplicationIds"
         | "createdAt"
         | "updatedAt"
-      > & { createdAt: Date; updatedAt: Date }
+        | "submittedAt"
+      > & { createdAt: Date; updatedAt: Date; submittedAt: Date | null }
     >(
       `SELECT ${summaryColumns},a.applicant_id AS "applicantId",a.department_id AS "departmentId",a.submitted_at AS "submittedAt",
       r.description,r.independent_reason AS "independentReason",r.remarks
@@ -93,21 +97,28 @@ async function detail(
       [id],
     )
   ).rows.map((row) => row.id);
-  await lockSources(client, ids, ownerId);
-  const linked = (
-    await client.query<
-      Omit<ReimbursementLinkedApplication, "submittedAt"> & {
-        submittedAt: Date;
-      }
-    >(
-      `SELECT ${linkColumns},
+  let linkedApplications = submittedLinks;
+  if (linkedApplications === undefined) {
+    await lockSources(client, ids, row.applicantId);
+    const linked = (
+      await client.query<
+        Omit<ReimbursementLinkedApplication, "submittedAt"> & {
+          submittedAt: Date;
+        }
+      >(
+        `SELECT ${linkColumns},
       CASE WHEN a.type='travel' THEN jsonb_build_object('departure',t.departure,'destination',t.destination,'startDate',t.start_date::text,'endDate',t.end_date::text,'durationDays',t.duration_days,'budget',t.budget::text) END AS travel,
       CASE WHEN a.type='purchase' THEN jsonb_build_object('budgetLimit',p.budget_limit::text,'totalAmount',(SELECT sum(amount)::numeric(14,2)::text FROM purchase_items WHERE app_id=a.id)) END AS purchase
      FROM applications a LEFT JOIN travel_requests t ON t.app_id=a.id LEFT JOIN purchase_requests p ON p.app_id=a.id
      WHERE a.id=ANY($1::uuid[]) AND a.applicant_id=$2 AND a.status='approved' AND a.type IN ('travel','purchase') ORDER BY a.id`,
-      [ids, ownerId],
-    )
-  ).rows;
+        [ids, row.applicantId],
+      )
+    ).rows;
+    linkedApplications = linked.map((row) => ({
+      ...row,
+      submittedAt: row.submittedAt.toISOString(),
+    }));
+  }
   const items = (
     await client.query<ReimbursementDraft["items"][number]>(
       `SELECT id,category,expense_date::text AS "expenseDate",purpose,amount::text,no_receipt AS "noReceipt",no_receipt_reason AS "noReceiptReason"
@@ -120,12 +131,19 @@ async function detail(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     linkedApplicationIds: ids,
-    linkedApplications: linked.map((row) => ({
-      ...row,
-      submittedAt: row.submittedAt.toISOString(),
-    })),
+    linkedApplications,
+    submittedAt: row.submittedAt?.toISOString() ?? null,
     items,
   };
+}
+async function detail(
+  client: PoolClient,
+  id: string,
+): Promise<ReimbursementDraft> {
+  const row = await readReimbursementDetail(client, id);
+  if (row.status !== "draft")
+    throw new ApiError(409, "NOT_DRAFT", "申请已不是草稿");
+  return { ...row, status: "draft", submittedAt: null };
 }
 async function replaceRows(
   client: PoolClient,
@@ -204,7 +222,7 @@ export async function createReimbursementDraft(
       [id, input.description, input.independentReason, input.remarks],
     );
     await replaceRows(client, id, input);
-    return detail(client, id, actor.id);
+    return detail(client, id);
   });
 }
 export async function getReimbursementDraft(
@@ -214,7 +232,7 @@ export async function getReimbursementDraft(
   return transaction(async (client) => {
     const actor = await requireBusinessActor(token, client);
     await lockReimbursementDraft(client, id, actor.id, false);
-    return detail(client, id, actor.id);
+    return detail(client, id);
   });
 }
 export async function listReimbursementDrafts(
@@ -288,7 +306,7 @@ export async function replaceReimbursementDraft(
       "UPDATE applications SET title=$2,department_id=$3,version=version+1,updated_at=clock_timestamp() WHERE id=$1",
       [id, input.title, actor.departmentId],
     );
-    return detail(client, id, actor.id);
+    return detail(client, id);
   });
 }
 export async function deleteReimbursementDraft(

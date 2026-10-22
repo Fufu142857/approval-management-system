@@ -11,6 +11,8 @@ import {
   authorizeReimbursementAttachmentUpload,
   uploadReimbursementAttachment,
   listReimbursementAttachments,
+  listSubmittedReimbursementAttachments,
+  getSubmittedReimbursementAttachmentContent,
   deleteReimbursementAttachment,
   getReimbursementAttachmentContent,
 } from "./reimbursement-attachments";
@@ -107,6 +109,40 @@ export function reimbursementAttachmentContentHandler(
       id,
       attachmentId,
     );
+    return attachmentResponse(attachment, bytes, disposition);
+  });
+}
+
+export function submittedReimbursementAttachmentsHandler(
+  request: Request,
+  context: Context,
+) {
+  return endpoint(async () => {
+    emptyAttachmentQuery.parse(query(request));
+    return data(
+      await listSubmittedReimbursementAttachments(
+        requestToken(request),
+        z.uuid().parse((await context.params).id),
+      ),
+    );
+  });
+}
+
+export function submittedReimbursementAttachmentContentHandler(
+  request: Request,
+  context: Context,
+) {
+  return endpoint(async () => {
+    const { disposition } = attachmentContentQuery.parse(query(request));
+    const params = await context.params;
+    const id = z.uuid().parse(params.id);
+    const attachmentId = z.uuid().parse(params.attachmentId);
+    const { attachment, bytes } =
+      await getSubmittedReimbursementAttachmentContent(
+        requestToken(request),
+        id,
+        attachmentId,
+      );
     return attachmentResponse(attachment, bytes, disposition);
   });
 }

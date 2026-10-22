@@ -11,6 +11,7 @@ import {
   receiptNumberSchema,
   type ReimbursementAttachment,
 } from "../lib/reimbursement-attachments";
+import { lockSubmittedReimbursement } from "./reimbursement-access";
 import { lockReimbursementDraft } from "./reimbursement";
 import {
   lockAttachmentStorage,
@@ -135,13 +136,16 @@ export async function uploadReimbursementAttachment(
     throw error;
   }
 }
-export async function listReimbursementAttachments(
+async function listAttachments(
   token: string | undefined,
   id: string,
+  submitted: boolean,
 ) {
   return transaction(async (client) => {
     const actor = await requireBusinessActor(token, client);
-    const app = await lockReimbursementDraft(client, id, actor.id, false);
+    const app = await (submitted
+      ? lockSubmittedReimbursement(client, id, actor.id)
+      : lockReimbursementDraft(client, id, actor.id, false));
     const result = await client.query<AttachmentRow>(
       `SELECT ${columns} FROM attachments WHERE app_id=$1 ORDER BY created_at,id`,
       [id],
@@ -179,14 +183,17 @@ export async function deleteReimbursementAttachment(
   await tryCollectAttachmentGarbage();
   return result;
 }
-export async function getReimbursementAttachmentContent(
+async function attachmentContent(
   token: string | undefined,
   id: string,
   attachmentId: string,
+  submitted: boolean,
 ) {
   return transaction(async (client) => {
     const actor = await requireBusinessActor(token, client);
-    await lockReimbursementDraft(client, id, actor.id, false);
+    await (submitted
+      ? lockSubmittedReimbursement(client, id, actor.id)
+      : lockReimbursementDraft(client, id, actor.id, false));
     const result = await client.query<AttachmentRow & { storageKey: string }>(
       `SELECT ${columns},storage_key AS "storageKey" FROM attachments WHERE id=$1 AND app_id=$2`,
       [attachmentId, id],
@@ -199,3 +206,22 @@ export async function getReimbursementAttachmentContent(
     };
   });
 }
+
+export const listReimbursementAttachments = (
+  token: string | undefined,
+  id: string,
+) => listAttachments(token, id, false);
+export const listSubmittedReimbursementAttachments = (
+  token: string | undefined,
+  id: string,
+) => listAttachments(token, id, true);
+export const getReimbursementAttachmentContent = (
+  token: string | undefined,
+  id: string,
+  attachmentId: string,
+) => attachmentContent(token, id, attachmentId, false);
+export const getSubmittedReimbursementAttachmentContent = (
+  token: string | undefined,
+  id: string,
+  attachmentId: string,
+) => attachmentContent(token, id, attachmentId, true);

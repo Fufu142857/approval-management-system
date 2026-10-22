@@ -485,7 +485,7 @@ PurchaseDraft / PurchaseRecord 详情新增 `resubmissionOf: UUID | null`；草�
 
 草稿输入：title（≤200）、description/independentReason/remarks（各≤2000），默认空字符串；linkedApplicationIds（UUID 数组，最多20个，不重复，默认[]）；items（最多100条，默认[]）。每行有可选 id、新行省略；category 为 transport/lodging/meals/office/other 或 null，expenseDate 为 YYYY-MM-DD 或 null，purpose≤2000，amount 为正十进制字符串或 null，noReceipt 默认false，noReceiptReason≤2000 默认空。字符串去两端空白，金额不接受数字/负数/零/科学计数或超过两位小数，规范化为两位小数；日期限定有效公历 0001–9999 年。
 
-已填每行金额与合计不超过 999999999999.99，校验使用整数分，数据库 NUMERIC(14,2) 汇总。零行或任一行未填金额时 totalAmount=null，不以零代替；其余明细还未填完时只要金额均已填，合计即可显示。noReceiptCount 是明确选中无票的行数，既不是缺失票据数也不代表无票例外已通过。草稿允许空标题/类别/日期/用途、缺独立说明或无票原因；完整必填、每行票据/无票原因、审批流转由后续提交阶段校验，S4j 本身无 submit/附件接口，S4k 附件契约见下一节；提交仍未实现。
+已填每行金额与合计不超过 999999999999.99，校验使用整数分，数据库 NUMERIC(14,2) 汇总。零行或任一行未填金额时 totalAmount=null，不以零代替；其余明细还未填完时只要金额均已填，合计即可显示。noReceiptCount 是明确选中无票的行数，既不是缺失票据数也不代表无票例外已通过。草稿允许空标题/类别/日期/用途、缺独立说明或无票原因；完整必填、每行票据/无票原因、审批流转由后续提交阶段校验，S4j 本身无 submit/附件接口，S4k 附件契约见下一节；S4l已补提交，见后文。
 
 PUT 是完整替换：省略字段恢复默认，省略 items/linkedApplicationIds 会清空费用/关联（S4k 起含票据费用须先显式删文件）；保留本单行 ID 才能稳定修改和排序，新行由服务端生成 UUID。重复或跨单/未知行 ID 返回400 INVALID_ROW_ID（重复由 schema VALIDATION_ERROR）；失败时旧单整体保留。身份、部门、编号、时间、type/status/version 派生值、totalAmount、linkedApplications、resubmissionOf、票据ID等不可通过正文伪造。新建 version=1、draft、submittedAt=null、当前部门；保存刷新为当前有效部门。
 
@@ -514,4 +514,25 @@ JPEG/PNG/PDF 校验实际文件内容、声明类型和文件名；单件10 MiB�
 
 上传/删除使用最新申请version并递增，旧版本409 VERSION_CONFLICT、达到上限409 VERSION_LIMIT；附件操作不会替代正文保存或改变金额/无票标记。PUT 草稿保留行ID可修改/重排，省略含票据明细返回409 ITEM_HAS_ATTACHMENTS并整体回滚；须先显式删该行所有票据，再以新版本保存。整单DELETE可按当前版本一次删除票据元数据、费用、关联和申请，提交后回收无引用文件；失败保留正文和原文件。
 
-锁顺序为组织/身份/部门 → 存储72004共享锁 → 报销申请排他锁；内容/列表持申请共享锁。存储失败、元数据/版本失败整体回滚，提交结果不确定时仅按数据库持久引用回收，不盲删文件；客户端应先重新读取，不自动重放写请求。报销提交与提交后附件授权尚未实现，草稿可以没有票据，noReceipt=true 也不绕过上传鉴权或配额。每行票据或无票原因的完整校验留待 S4l。
+锁顺序为组织/身份/部门 → 存储72004共享锁 → 报销申请排他锁；内容/列表持申请共享锁。存储失败、元数据/版本失败整体回滚，提交结果不确定时仅按数据库持久引用回收，不盲删文件；客户端应先重新读取，不自动重放写请求。S4l已补报销提交与提交后附件授权；S4k草稿路径仍可没有票据，noReceipt=true 也不绕过上传鉴权或配额。每行票据或无票原因的完整校验由S4l提交接口执行。
+
+## S4l 固定报销提交与提交后详情
+
+| 方法与路径                                                                | 输入                                                | 成功响应                                      |
+| ------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------- |
+| POST /api/reimbursement-drafts/:id/submit                                 | UUID；严格JSON `{ version }`，不接受查询参数        | 200；`{ application, workflow, tasks, logs }` |
+| GET /api/reimbursement-applications/:id                                   | UUID，无查询参数                                    | 200；上述详情                                 |
+| GET /api/reimbursement-applications/:id/attachments                       | UUID，无查询参数                                    | 200；`{ items, totalBytes, version, status }` |
+| GET /api/reimbursement-applications/:id/attachments/:attachmentId/content | UUID；disposition=inline/attachment，默认attachment | 200；已鉴权原始字节                           |
+
+提交仅有效身份的本人draft可用；他人/管理员/跨类型/不存在404，非草稿409 NOT_DRAFT，旧版本409 VERSION_CONFLICT，上限409 VERSION_LIMIT。正文最多16KiB，只收version；Cookie同源/Bearer规则不变，不接受客户端正文、身份、总额、审批人、附件ID或来源替换。必须先保存，文件操作会更新同一version，提交成功后不能继续用草稿路径写入或读取。
+
+完整校验：title/description必填；无关联须independentReason，关联则逐一重核本人已批travel/purchase；至少一条完整费用（不强制三条），每行category/expenseDate/purpose/正amount必填，所有值重过既有schema。每行至少一份本行票据，或noReceipt=true且noReceiptReason非空；有原因但未选例外仍要求票据。明确选中无票但已有文件的行仍保留例外，不自动改标记；包括这种文件在内的全部票据均验证原件，缺失/损坏409 ATTACHMENT_UNAVAILABLE。配额/归属异常409 ATTACHMENT_INCONSISTENT；字段问题400 VALIDATION_ERROR带fieldErrors。金额按整数分重新合计并核对NUMERIC结果，不一致409 AMOUNT_INCONSISTENT；源资格变化404 LINK_NOT_AVAILABLE。
+
+固定路径版本fixed-reimbursement-v1：本部门唯一有效负责人→全组织唯一有效财务审批人，不按金额分支。缺失/多名409 APPROVER_UNRESOLVED，自审409 SELF_APPROVAL；同一非申请人可兼任两步。部门取提交时本人当前有效部门。事务原子设置pending/version+1/submittedAt、保存不可变人员快照、首任务pending/财务blocked、提交日志和首待办通知；任何失败全部回滚。
+
+ReimbursementRecord扩展草稿详情的status为五种状态、submittedAt为string|null。提交后仍返回固定字段/费用/精确合计/noReceiptCount；linkedApplications为提交时冻结的必要来源摘要，不查询后来源正文，也不赋予源附件/历史权限。workflow包含id/ruleVersion/submittedVersion/routeSnapshot/createdAt；routeSnapshot含policy、applicant、steps、totalAmount、independentReason、linkedApplications、noReceiptItems（id/reason）和attachmentEvidence（id/itemId/receiptNumber/mimeType/sizeBytes/sha256，无存储键）。tasks按seqNo，含id/name/approverId/status/createdAt/activatedAt/finishedAt；logs含id/taskId/actorId/action/opinion/result/applicationVersion/createdAt，按时间/id。
+
+详情与提交后票据仅本人或activatedAt非空的实际任务人员可读，未来blocked财务、管理员、新任负责人无特权。先持申请共享锁再重验授权；不存在、draft、无权访问统一404，身份检查同旧接口。附件响应及完整性校验沿用S4k，提交后没有上传/删除端点。通知target.type新增reimbursement，apiPath指向上述详情API；通知Web仍只给已存在的差旅/采购页面生成链接。报销审批动作/列表/UI尚未实现。
+
+服务在src/server/reimbursement-submission.ts，固定字段校验在src/lib/reimbursement-submission.ts、持久文件校验在src/server/reimbursement-submission-validation.ts，权限在reimbursement-access.ts。真实签名/锁责任见HUMAN_HANDOFF.md；无新迁移，沿用014。详情缺少实例404 NOT_FOUND，关联快照缺失409 SNAPSHOT_INCOMPLETE；不能回退为未经授权的实时源数据。

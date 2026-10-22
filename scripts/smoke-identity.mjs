@@ -1936,6 +1936,176 @@ try {
     receiptsBeforeRestart.totalBytes,
     receiptPayloads.reduce((sum, [bytes]) => sum + bytes.length, 0),
   );
+  // S4l: validate persisted reimbursement rows/files, freeze route and authorize submitted reads.
+  const submissionDraft = await call(
+    "reimbursement-drafts",
+    "POST",
+    { ...expenseFields, title: "报销提交HTTP" },
+    token,
+  );
+  assert.equal(submissionDraft.response.status, 201);
+  const submissionApp = submissionDraft.body.data;
+  const reimbursementDraftPath = `reimbursement-drafts/${submissionApp.id}`;
+  const reimbursementApplicationPath = `reimbursement-applications/${submissionApp.id}`;
+  assert.equal(
+    (
+      await call(
+        `${reimbursementDraftPath}/submit`,
+        "POST",
+        { version: 1 },
+        token,
+      )
+    ).response.status,
+    400,
+  );
+  assert.equal(
+    (await call(reimbursementDraftPath, "GET", undefined, token)).body.data
+      .version,
+    1,
+  );
+  const submissionFiles = [];
+  for (const [index, [bytes, name, type]] of receiptPayloads.entries()) {
+    const form = new FormData();
+    form.set("file", new File([bytes], name, { type }));
+    form.set("version", String(index + 1));
+    form.set("receiptNumber", `SUBMIT-${index}`);
+    const response = await fetch(
+      `${origin}/api/${reimbursementDraftPath}/items/${submissionApp.items[index === 2 ? 1 : 0].id}/attachments`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, Origin: origin },
+        body: form,
+      },
+    );
+    assert.equal(response.status, 201);
+    submissionFiles.push((await response.json()).data.attachment);
+  }
+  assert.equal(
+    (
+      await call(
+        `${reimbursementDraftPath}/submit`,
+        "POST",
+        { version: 3 },
+        token,
+      )
+    ).response.status,
+    409,
+  );
+  const submittedExpenseResponse = await call(
+    `${reimbursementDraftPath}/submit`,
+    "POST",
+    { version: 4 },
+    token,
+  );
+  assert.equal(submittedExpenseResponse.response.status, 200);
+  const submittedExpense = submittedExpenseResponse.body.data;
+  assert.equal(submittedExpense.application.version, 5);
+  assert.equal(submittedExpense.application.totalAmount, "1.53");
+  assert.equal(submittedExpense.application.status, "pending");
+  assert.equal(submittedExpense.workflow.ruleVersion, "fixed-reimbursement-v1");
+  assert.deepEqual(
+    submittedExpense.tasks.map((task) => task.status),
+    ["pending", "blocked"],
+  );
+  assert.equal(
+    submittedExpense.workflow.routeSnapshot.noReceiptItems.length,
+    1,
+  );
+  assert.deepEqual(
+    submittedExpense.workflow.routeSnapshot.linkedApplications,
+    submissionApp.linkedApplications,
+  );
+  assert.deepEqual(
+    submittedExpense.tasks.map((task) => task.approverId),
+    [head.id, finance.id],
+  );
+  assert.equal(JSON.stringify(submittedExpense).includes("storageKey"), false);
+  assert.equal(
+    (
+      await call(
+        `${reimbursementDraftPath}/submit`,
+        "POST",
+        { version: 5 },
+        token,
+      )
+    ).response.status,
+    409,
+  );
+  assert.equal(
+    (await call(reimbursementDraftPath, "PUT", { version: 5 }, token)).response
+      .status,
+    409,
+  );
+  assert.equal(
+    (await call(reimbursementDraftPath, "DELETE", { version: 5 }, token))
+      .response.status,
+    409,
+  );
+  assert.equal(
+    (
+      await call(
+        `${reimbursementDraftPath}/attachments/${submissionFiles[0].id}`,
+        "DELETE",
+        { version: 5 },
+        token,
+      )
+    ).response.status,
+    409,
+  );
+  for (const actorToken of [finance.token, companyHead.token]) {
+    assert.equal(
+      (await call(reimbursementApplicationPath, "GET", undefined, actorToken))
+        .response.status,
+      404,
+    );
+    assert.equal(
+      (
+        await call(
+          `${reimbursementApplicationPath}/attachments`,
+          "GET",
+          undefined,
+          actorToken,
+        )
+      ).response.status,
+      404,
+    );
+    const denied = await fetch(
+      `${origin}/api/${reimbursementApplicationPath}/attachments/${submissionFiles[0].id}/content`,
+      { headers: { Authorization: `Bearer ${actorToken}` } },
+    );
+    assert.equal(denied.status, 404);
+  }
+  assert.equal(
+    (
+      await call(
+        reimbursementApplicationPath,
+        "GET",
+        undefined,
+        undefined,
+        cookie,
+      )
+    ).response.status,
+    404,
+  );
+  const expenseNotice = (
+    await call("notifications?pageSize=100", "GET", undefined, head.token)
+  ).body.data.items.find((notice) => notice.appId === submissionApp.id);
+  assert(expenseNotice);
+  assert.equal(expenseNotice.target.type, "reimbursement");
+  assert.equal(
+    expenseNotice.target.apiPath,
+    `/api/${reimbursementApplicationPath}`,
+  );
+  const submittedExpenseFiles = (
+    await call(
+      `${reimbursementApplicationPath}/attachments`,
+      "GET",
+      undefined,
+      head.token,
+    )
+  ).body.data;
+  assert.equal(submittedExpenseFiles.version, 5);
+  assert.deepEqual(submittedExpenseFiles.items, submissionFiles);
   const purchaseRelationBefore = (
     await call(purchaseRetryPath, "GET", undefined, token)
   ).body.data;
@@ -1973,6 +2143,46 @@ try {
     assert.equal(bytes.status, 200);
     assert.deepEqual(Buffer.from(await bytes.arrayBuffer()), png);
   }
+  for (const actorToken of [token, head.token]) {
+    assert.deepEqual(
+      (await call(reimbursementApplicationPath, "GET", undefined, actorToken))
+        .body.data,
+      submittedExpense,
+    );
+    assert.deepEqual(
+      (
+        await call(
+          `${reimbursementApplicationPath}/attachments`,
+          "GET",
+          undefined,
+          actorToken,
+        )
+      ).body.data,
+      submittedExpenseFiles,
+    );
+    for (const [index, file] of submissionFiles.entries()) {
+      const response = await fetch(
+        `${origin}/api/${reimbursementApplicationPath}/attachments/${file.id}/content`,
+        { headers: { Authorization: `Bearer ${actorToken}` } },
+      );
+      assert.equal(response.status, 200);
+      assert.deepEqual(
+        Buffer.from(await response.arrayBuffer()),
+        receiptPayloads[index][0],
+      );
+    }
+  }
+  assert.deepEqual(
+    (
+      await call(
+        `notifications/${expenseNotice.id}`,
+        "GET",
+        undefined,
+        head.token,
+      )
+    ).body.data.target,
+    expenseNotice.target,
+  );
   assert.deepEqual(
     (await call(expensePath, "GET", undefined, token)).body.data,
     expenseBeforeRestart,
@@ -2080,7 +2290,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; reimbursement submission/receipt completeness/finance snapshots/frozen source summaries/submitted authorization/notice and file persistence; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");
