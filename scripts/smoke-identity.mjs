@@ -1701,6 +1701,174 @@ try {
   assert.equal(repeatedPurchaseCopy.response.status, 200);
   assert.equal(repeatedPurchaseCopy.body.data.created, false);
   assert.equal(repeatedPurchaseCopy.body.data.successor.id, purchaseChild.id);
+  // S4j: owned approved link options and multi-line reimbursement drafts.
+  const eligibleResponse = await call(
+    "reimbursement-link-options?pageSize=100",
+    "GET",
+    undefined,
+    token,
+  );
+  assert.equal(eligibleResponse.response.status, 200);
+  const eligible = eligibleResponse.body.data;
+  const expenseSources = ["travel", "purchase"].map((type) => {
+    const item = eligible.items.find((item) => item.type === type);
+    assert(item);
+    assert.equal(item.status, "approved");
+    return item;
+  });
+  const originalExpenseSources = await Promise.all(
+    expenseSources.map(async (source) => ({
+      path: `${source.type}-applications/${source.id}`,
+      data: (
+        await call(
+          `${source.type}-applications/${source.id}`,
+          "GET",
+          undefined,
+          token,
+        )
+      ).body.data,
+    })),
+  );
+  const expenseFields = {
+    title: "关联报销 HTTP",
+    description: "实际费用",
+    independentReason: "",
+    remarks: "核对原单",
+    linkedApplicationIds: expenseSources.map((source) => source.id),
+    items: [
+      {
+        category: "transport",
+        expenseDate: "2028-02-29",
+        purpose: "车费",
+        amount: "0.1",
+      },
+      {
+        category: "lodging",
+        expenseDate: "2028-03-01",
+        purpose: "住宿",
+        amount: "0.2",
+      },
+      {
+        category: "meals",
+        expenseDate: "2028-03-01",
+        purpose: "餐饮",
+        amount: "1.23",
+        noReceipt: true,
+        noReceiptReason: "遗失",
+      },
+    ],
+  };
+  const createdExpense = await call(
+    "reimbursement-drafts",
+    "POST",
+    expenseFields,
+    token,
+  );
+  assert.equal(createdExpense.response.status, 201);
+  const expenseDraft = createdExpense.body.data;
+  const expensePath = `reimbursement-drafts/${expenseDraft.id}`;
+  assert.equal(expenseDraft.totalAmount, "1.53");
+  assert.equal(expenseDraft.noReceiptCount, 1);
+  assert.equal(expenseDraft.linkedApplications.length, 2);
+  assert.equal(
+    expenseDraft.linkedApplications.find((item) => item.type === "travel")
+      .travel.destination,
+    originalExpenseSources[0].data.application.destination,
+  );
+  for (const actorToken of [head.token, finance.token]) {
+    assert.equal(
+      (await call(expensePath, "GET", undefined, actorToken)).response.status,
+      404,
+    );
+    assert.equal(
+      (await call("reimbursement-drafts", "POST", expenseFields, actorToken))
+        .response.status,
+      404,
+    );
+  }
+  assert.equal(
+    (await call(expensePath, "GET", undefined, undefined, cookie)).response
+      .status,
+    404,
+  );
+  assert.equal(
+    (
+      await call(
+        "reimbursement-drafts",
+        "POST",
+        expenseFields,
+        undefined,
+        cookie,
+      )
+    ).response.status,
+    404,
+  );
+  assert.equal(
+    (
+      await call(
+        "reimbursement-drafts",
+        "POST",
+        { ...expenseFields, linkedApplicationIds: [purchaseChild.id] },
+        token,
+      )
+    ).response.status,
+    404,
+  );
+  const editedExpense = await call(
+    expensePath,
+    "PUT",
+    {
+      ...expenseFields,
+      title: "关联报销修改后",
+      version: 1,
+      items: [...expenseDraft.items].reverse(),
+    },
+    token,
+  );
+  assert.equal(editedExpense.response.status, 200);
+  const expenseBeforeRestart = editedExpense.body.data;
+  assert.deepEqual(
+    expenseBeforeRestart.items.map((item) => item.id),
+    expenseDraft.items.map((item) => item.id).reverse(),
+  );
+  assert.equal(expenseBeforeRestart.version, 2);
+  assert.equal(
+    (await call(expensePath, "PUT", { version: 1 }, token)).response.status,
+    409,
+  );
+  assert.equal(
+    (await call(expensePath, "DELETE", { version: 1 }, token)).response.status,
+    409,
+  );
+  const expenseListBefore = (
+    await call(
+      "reimbursement-drafts?keyword=关联报销修改后&pageSize=1",
+      "GET",
+      undefined,
+      token,
+    )
+  ).body.data;
+  assert.equal(expenseListBefore.total, 1);
+  assert.equal(expenseListBefore.items[0].totalAmount, "1.53");
+  const independent = await call(
+    "reimbursement-drafts",
+    "POST",
+    { independentReason: "独立支出", items: [{}] },
+    token,
+  );
+  assert.equal(independent.response.status, 201);
+  assert.equal(independent.body.data.totalAmount, null);
+  assert.equal(
+    (
+      await call(
+        `reimbursement-drafts/${independent.body.data.id}`,
+        "DELETE",
+        { version: 1 },
+        token,
+      )
+    ).response.status,
+    200,
+  );
   const purchaseRelationBefore = (
     await call(purchaseRetryPath, "GET", undefined, token)
   ).body.data;
@@ -1738,6 +1906,45 @@ try {
     assert.equal(bytes.status, 200);
     assert.deepEqual(Buffer.from(await bytes.arrayBuffer()), png);
   }
+  assert.deepEqual(
+    (await call(expensePath, "GET", undefined, token)).body.data,
+    expenseBeforeRestart,
+  );
+  assert.deepEqual(
+    (
+      await call(
+        "reimbursement-drafts?keyword=关联报销修改后&pageSize=1",
+        "GET",
+        undefined,
+        token,
+      )
+    ).body.data,
+    expenseListBefore,
+  );
+  assert.deepEqual(
+    (
+      await call(
+        "reimbursement-link-options?pageSize=100",
+        "GET",
+        undefined,
+        token,
+      )
+    ).body.data,
+    eligible,
+  );
+  assert.equal(
+    (await call(expensePath, "DELETE", { version: 2 }, token)).response.status,
+    200,
+  );
+  assert.equal(
+    (await call(expensePath, "GET", undefined, token)).response.status,
+    404,
+  );
+  for (const source of originalExpenseSources)
+    assert.deepEqual(
+      (await call(source.path, "GET", undefined, token)).body.data,
+      source.data,
+    );
   assert.equal(
     (await call("auth/logout", "POST", undefined, token)).response.status,
     200,
@@ -1752,7 +1959,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts and restart persistence; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

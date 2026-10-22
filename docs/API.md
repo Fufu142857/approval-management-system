@@ -469,3 +469,30 @@ POST 事务锁原申请后核已有唯一直接后续：存在时返回其当前
 PurchaseDraft / PurchaseRecord 详情新增 `resubmissionOf: UUID | null`；草稿列表/全状态列表/任务摘要未新增该字段。普通 POST/PUT 严格拒绝同名输入，012 迁移扩展既有不可变关联约束，仅允许同类型 travel/purchase、同本人、来源终态的新草稿。关联不传递正文/附件权限；界面只向本人显示原申请链接，审批人按各单实际任务单独授权。
 
 类型在 src/lib/purchase-resubmission.ts：PurchaseSuccessor、PurchaseResubmission、PurchaseResubmissionResult。服务 src/server/purchase-resubmission.ts 导出 getPurchaseResubmission(token: string | undefined, id: string) 与 copyPurchaseForResubmission(token: string | undefined, id: string, version: number)，各自开事务；直接调用前校验 UUID/version。界面和恢复约定见 WEB_PURCHASE_RESUBMISSION.md。
+
+## S4j 固定报销草稿与关联候选
+
+| 方法与路径                           | 输入                                               | 成功响应                                      |
+| ------------------------------------ | -------------------------------------------------- | --------------------------------------------- |
+| POST /api/reimbursement-drafts       | 严格草稿 JSON                                      | 201；ReimbursementDraft                       |
+| GET /api/reimbursement-drafts        | page、pageSize、keyword                            | 200；items/total/page/pageSize                |
+| GET /api/reimbursement-drafts/:id    | UUID，无查询参数                                   | 200；本人 ReimbursementDraft                  |
+| PUT /api/reimbursement-drafts/:id    | 严格完整替换 JSON 与 version                       | 200；version+1 的 ReimbursementDraft          |
+| DELETE /api/reimbursement-drafts/:id | 严格 `{ version }`                                 | 200；`{ id, deleted: true }`                  |
+| GET /api/reimbursement-link-options  | page、pageSize、keyword、可选 type=travel/purchase | 200；本人已批准候选 items/total/page/pageSize |
+
+仅 active 业务身份和有效部门；草稿所有权由会话决定，管理员/负责人/财务没有额外权限。跨人/跨类型/不存在草稿 404 NOT_FOUND，非草稿 409 NOT_DRAFT；版本不匹配 409 VERSION_CONFLICT，PUT 版本达到 2147483647 则 409 VERSION_LIMIT，仍可按当前版本删除。鉴权、Origin、JSON 和 no-store 约定不变；POST/PUT 最多 256 KiB，其余 JSON 默认 16 KiB；未知/重复查询、非法 UUID、未允许输入字段返回 400。
+
+草稿输入：title（≤200）、description/independentReason/remarks（各≤2000），默认空字符串；linkedApplicationIds（UUID 数组，最多20个，不重复，默认[]）；items（最多100条，默认[]）。每行有可选 id、新行省略；category 为 transport/lodging/meals/office/other 或 null，expenseDate 为 YYYY-MM-DD 或 null，purpose≤2000，amount 为正十进制字符串或 null，noReceipt 默认false，noReceiptReason≤2000 默认空。字符串去两端空白，金额不接受数字/负数/零/科学计数或超过两位小数，规范化为两位小数；日期限定有效公历 0001–9999 年。
+
+已填每行金额与合计不超过 999999999999.99，校验使用整数分，数据库 NUMERIC(14,2) 汇总。零行或任一行未填金额时 totalAmount=null，不以零代替；其余明细还未填完时只要金额均已填，合计即可显示。noReceiptCount 是明确选中无票的行数，既不是缺失票据数也不代表无票例外已通过。草稿允许空标题/类别/日期/用途、缺独立说明或无票原因；完整必填、每行票据/无票原因、审批流转由后续提交阶段校验，本阶段无 submit/附件接口。
+
+PUT 是完整替换：省略字段恢复默认，省略 items/linkedApplicationIds 会清空费用/关联；保留本单行 ID 才能稳定修改和排序，新行由服务端生成 UUID。重复或跨单/未知行 ID 返回400 INVALID_ROW_ID（重复由 schema VALIDATION_ERROR）；失败时旧单整体保留。身份、部门、编号、时间、type/status/version 派生值、totalAmount、linkedApplications、resubmissionOf、票据ID等不可通过正文伪造。新建 version=1、draft、submittedAt=null、当前部门；保存刷新为当前有效部门。
+
+关联采用独立 application_links，支持最多20个本人已批准 travel/purchase 来源，返回关联按 UUID 排序，不保留选择顺序。同一来源可关联多份报销，不实施“原单只能报销一次”或累计额度规则。不存在/非本人/非已批/非两类来源统一404 LINK_NOT_AVAILABLE，不泄露他人状态。草稿读取和写入都在锁内重新核验关联所有权与状态；关联不授予任何人读取原单或报销的额外权限。源单正文、版本、审批历史、附件均不改；取消关联或删除报销不删除原单。来源异常时读取拒绝，仍可通过完整 PUT 清除关联恢复草稿。
+
+ReimbursementDraft 返回输入字段及服务端 id/appNo/applicantId/departmentId/type/status/version/createdAt/updatedAt/submittedAt、totalAmount、noReceiptCount、带UUID的items、linkedApplications。后者每项含 id/appNo/title/type/status=approved/submittedAt/departmentId，以及 travel（departure/destination/startDate/endDate/durationDays/budget）或 purchase（budgetLimit/totalAmount）；另一类型字段为null。只返回这些必要摘要，不包含源审批历史或附件。
+
+草稿列表 items 仅含 id/appNo/title/type/status/version/createdAt/updatedAt/totalAmount/noReceiptCount；候选列表 items 仅含 id/appNo/title/type/status/submittedAt/departmentId。默认page=1/pageSize=20，最大100；keyword≤200，标题/编号不区分大小写的字面包含匹配。草稿按 updatedAt DESC,id 排序；候选按 submittedAt DESC,id 排序；总数和分页单 SQL 快照，超界页返回空items及真实total。候选查询不冻结选择，保存时再次核验。
+
+类型/schema 位于 src/lib/reimbursement.ts；事务服务 src/server/reimbursement.ts 导出 createReimbursementDraft(token, input)、getReimbursementDraft(token,id)、listReimbursementDrafts(token,input)、replaceReimbursementDraft(token,id,input)、deleteReimbursementDraft(token,id,version)、listReimbursementLinkOptions(token,input)，token 为 string | undefined，id 为UUID string，输入分别为对应schema解析后的类型。lockReimbursementDraft(client,id,ownerId,write) 仅供已执行 requireBusinessActor 的事务使用。013 迁移及范围见 REIMBURSEMENT_DRAFTS.md / DATABASE.md；没有可配置字段或动态模板能力。
