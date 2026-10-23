@@ -2338,6 +2338,188 @@ try {
       notices: terminalNotices,
     });
   }
+  // S4n: owned/all-state and actual pending/handled lists, then compare after restart.
+  const listDraft = await call(
+    "reimbursement-drafts",
+    "POST",
+    {
+      ...expenseFields,
+      title: "报销列表HTTP-Pending",
+      items: expenseFields.items.map((item) => ({
+        ...item,
+        noReceipt: true,
+        noReceiptReason: "已声明例外",
+      })),
+    },
+    token,
+  );
+  assert.equal(listDraft.response.status, 201);
+  const listId = listDraft.body.data.id;
+  const listSubmitted = await call(
+    `reimbursement-drafts/${listId}/submit`,
+    "POST",
+    { version: 1 },
+    token,
+  );
+  assert.equal(listSubmitted.response.status, 200);
+  const listAdvanced = await call(
+    `reimbursement-applications/${listId}/tasks/${listSubmitted.body.data.tasks[0].id}/decision`,
+    "POST",
+    { version: 2, decision: "approve", opinion: "" },
+    head.token,
+  );
+  assert.equal(listAdvanced.response.status, 200);
+  const reimbursementListSnapshots = [];
+  async function captureReimbursementList(path, actorToken, actorCookie) {
+    const result = await call(path, "GET", undefined, actorToken, actorCookie);
+    assert.equal(result.response.status, 200);
+    reimbursementListSnapshots.push({
+      path,
+      actorToken,
+      actorCookie,
+      data: result.body.data,
+    });
+    return result.body.data;
+  }
+  const expenseAll = await captureReimbursementList(
+    "reimbursement-applications?pageSize=100",
+    token,
+  );
+  assert.deepEqual(
+    [...new Set(expenseAll.items.map((item) => item.status))].sort(),
+    ["approved", "draft", "pending", "rejected", "withdrawn"],
+  );
+  for (const entry of reimbursementTerminals) {
+    const item = expenseAll.items.find(
+      (item) => item.id === entry.terminal.application.id,
+    );
+    assert.equal(item.status, entry.terminal.application.status);
+    assert.equal(item.totalAmount, "1.53");
+    assert.equal(item.noReceiptCount, 2);
+    assert.equal(item.currentTask, null);
+    for (const key of [
+      "items",
+      "linkedApplications",
+      "linkedApplicationIds",
+      "routeSnapshot",
+      "description",
+      "remarks",
+    ])
+      assert.equal(Object.hasOwn(item, key), false);
+  }
+  for (const actor of [head.token, finance.token, companyHead.token])
+    assert.equal(
+      (await captureReimbursementList("reimbursement-applications", actor))
+        .total,
+      0,
+    );
+  assert.equal(
+    (
+      await captureReimbursementList(
+        "reimbursement-applications",
+        undefined,
+        cookie,
+      )
+    ).total,
+    0,
+  );
+  const terminalPath =
+    "reimbursement-applications?keyword=" + encodeURIComponent("报销动作HTTP-");
+  assert.equal(
+    (
+      await captureReimbursementList(
+        terminalPath + "&page=99&pageSize=2",
+        token,
+      )
+    ).total,
+    5,
+  );
+  assert.deepEqual(
+    (
+      await captureReimbursementList(
+        terminalPath + "&page=99&pageSize=2",
+        token,
+      )
+    ).items,
+    [],
+  );
+  assert.equal(
+    (await captureReimbursementList(terminalPath + "&status=withdrawn", token))
+      .total,
+    2,
+  );
+  const expensePage1 = await captureReimbursementList(
+    terminalPath + "&pageSize=2",
+    token,
+  );
+  const expensePage2 = await captureReimbursementList(
+    terminalPath + "&pageSize=2&page=2",
+    token,
+  );
+  assert.equal(
+    new Set(
+      [...expensePage1.items, ...expensePage2.items].map((item) => item.id),
+    ).size,
+    4,
+  );
+  const pendingListPath =
+    "reimbursement-tasks?keyword=" + encodeURIComponent("报销列表HTTP-");
+  assert.equal(
+    (await captureReimbursementList(pendingListPath, head.token)).total,
+    0,
+  );
+  const financePending = await captureReimbursementList(
+    pendingListPath,
+    finance.token,
+  );
+  assert.equal(financePending.total, 1);
+  assert.equal(financePending.items[0].seqNo, 2);
+  assert.equal(financePending.items[0].application.version, 3);
+  assert.equal(financePending.items[0].application.noReceiptCount, 3);
+  assert.equal(financePending.items[0].application.totalAmount, "1.53");
+  assert.equal(
+    (await captureReimbursementList(pendingListPath, companyHead.token)).total,
+    0,
+  );
+  assert.equal(
+    (await captureReimbursementList(pendingListPath, undefined, cookie)).total,
+    0,
+  );
+  const handledPath =
+    "reimbursement-tasks?state=handled&keyword=" +
+    encodeURIComponent("报销动作HTTP-");
+  const reimbursementHeadHandled = await captureReimbursementList(
+    handledPath,
+    head.token,
+  );
+  assert.equal(reimbursementHeadHandled.total, 4); // withdraw-first is cancelled, not handled.
+  assert.equal(
+    (await captureReimbursementList(handledPath, finance.token)).total,
+    2,
+  );
+  assert.equal((await captureReimbursementList(handledPath, token)).total, 0);
+  const handledWithdrawn = await captureReimbursementList(
+    handledPath + "&status=withdrawn",
+    head.token,
+  );
+  assert.equal(handledWithdrawn.total, 1);
+  assert.equal(handledWithdrawn.items[0].status, "approved");
+  assert.equal(handledWithdrawn.items[0].application.status, "withdrawn");
+  for (const path of ["reimbursement-applications", "reimbursement-tasks"]) {
+    assert.equal((await call(path)).response.status, 401);
+    for (const query of [
+      "type=purchase",
+      "page=1&page=2",
+      "pageSize=101",
+      "from=2027-02-29",
+      "approverId=" + head.id,
+    ])
+      assert.equal(
+        (await call(path + "?" + query, "GET", undefined, token)).response
+          .status,
+        400,
+      );
+  }
   const purchaseRelationBefore = (
     await call(purchaseRetryPath, "GET", undefined, token)
   ).body.data;
@@ -2345,6 +2527,19 @@ try {
   await server.closed;
   server = startServer();
   await ready();
+  for (const saved of reimbursementListSnapshots)
+    assert.deepEqual(
+      (
+        await call(
+          saved.path,
+          "GET",
+          undefined,
+          saved.actorToken,
+          saved.actorCookie,
+        )
+      ).body.data,
+      saved.data,
+    );
   for (const entry of reimbursementTerminals) {
     for (const actorToken of [
       token,
@@ -2580,7 +2775,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; reimbursement submission/receipt completeness/finance snapshots/frozen source summaries/submitted authorization/notice and file persistence; reimbursement two-step approval/rejection/withdrawal at both nodes, terminal history authorization/frozen evidence/notifications and receipt bytes after restart; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; reimbursement submission/receipt completeness/finance snapshots/frozen source summaries/submitted authorization/notice and file persistence; reimbursement two-step approval/rejection/withdrawal at both nodes, terminal history authorization/frozen evidence/notifications and receipt bytes after restart; reimbursement owned/pending/handled lists, filters/pagination/exact totals/no-receipt summaries, permissions and restart persistence; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

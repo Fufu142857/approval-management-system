@@ -533,7 +533,7 @@ JPEG/PNG/PDF 校验实际文件内容、声明类型和文件名；单件10 MiB�
 
 ReimbursementRecord扩展草稿详情的status为五种状态、submittedAt为string|null。提交后仍返回固定字段/费用/精确合计/noReceiptCount；linkedApplications为提交时冻结的必要来源摘要，不查询后来源正文，也不赋予源附件/历史权限。workflow包含id/ruleVersion/submittedVersion/routeSnapshot/createdAt；routeSnapshot含policy、applicant、steps、totalAmount、independentReason、linkedApplications、noReceiptItems（id/reason）和attachmentEvidence（id/itemId/receiptNumber/mimeType/sizeBytes/sha256，无存储键）。tasks按seqNo，含id/name/approverId/status/createdAt/activatedAt/finishedAt；logs含id/taskId/actorId/action/opinion/result/applicationVersion/createdAt，按时间/id。
 
-详情与提交后票据仅本人或activatedAt非空的实际任务人员可读，未来blocked财务、管理员、新任负责人无特权。先持申请共享锁再重验授权；不存在、draft、无权访问统一404，身份检查同旧接口。附件响应及完整性校验沿用S4k，提交后没有上传/删除端点。通知target.type新增reimbursement，apiPath指向上述详情API；通知Web仍只给已存在的差旅/采购页面生成链接。报销审批动作已由S4m实现，见下节；列表/UI尚未实现。
+详情与提交后票据仅本人或activatedAt非空的实际任务人员可读，未来blocked财务、管理员、新任负责人无特权。先持申请共享锁再重验授权；不存在、draft、无权访问统一404，身份检查同旧接口。附件响应及完整性校验沿用S4k，提交后没有上传/删除端点。通知target.type新增reimbursement，apiPath指向上述详情API；通知Web仍只给已存在的差旅/采购页面生成链接。报销审批动作已由S4m实现，见下节；列表已由S4n实现，UI尚未实现。
 
 服务在src/server/reimbursement-submission.ts，固定字段校验在src/lib/reimbursement-submission.ts、持久文件校验在src/server/reimbursement-submission-validation.ts，权限在reimbursement-access.ts。真实签名/锁责任见HUMAN_HANDOFF.md；无新迁移，沿用014。详情缺少实例404 NOT_FOUND，关联快照缺失409 SNAPSHOT_INCOMPLETE；不能回退为未经授权的实时源数据。
 
@@ -554,4 +554,16 @@ approve 沿提交时固定部门→财务快照执行：首步激活原财务，
 
 新待办通知下一实际人员，通过/驳回通知申请人，撤回通知申请人及曾激活人员并按人去重。未激活财务无撤回通知/正文/票据权限；已激活人员在有效身份下保留终态历史读取权。通知target/task展示当前状态，已读标记不受动作影响。失败或响应丢失先GET核对，不自动重放；重复操作不追加日志或通知。
 
-类型/schema在src/lib/reimbursement-actions.ts，事务服务在src/server/reimbursement-actions.ts，HTTP边界在reimbursement-action-handlers.ts，详细锁与调用责任见HUMAN_HANDOFF.md。本阶段无新迁移，仍014；尚无报销列表、审批页面或复制重提。
+类型/schema在src/lib/reimbursement-actions.ts，事务服务在src/server/reimbursement-actions.ts，HTTP边界在reimbursement-action-handlers.ts，详细锁与调用责任见HUMAN_HANDOFF.md。本阶段无新迁移，仍014；S4n已补列表，尚无报销审批页面或复制重提。
+
+## S4n 固定报销列表
+
+GET /api/reimbursement-applications 返回本人所有状态报销申请；GET /api/reimbursement-tasks 返回本人当前实际待办或已办。二者独立于差旅/采购接口，不扩大源单访问权。
+
+共用严格参数：page=1..100000（默认1）、pageSize=1..100（默认20）、type仅reimbursement（默认）、status=all/draft/pending/approved/rejected/withdrawn（默认all）、keyword（trim后≤200字符、标题/编号大小写不敏感字面量匹配）、from/to（有效YYYY-MM-DD，年份0001–9999，起止有序）；任务另收state=pending/handled（默认pending）。未知、重复或非法参数400 VALIDATION_ERROR。status筛选申请当前状态；from/to按上海日历日包含首尾，申请按createdAt、待办按activatedAt、已办按finishedAt筛选和降序排列，id升序打破同时间排序。
+
+返回data={items,total,page,pageSize}，任务另含state；空页保留筛选总数。申请摘要为{id,appNo,type,title,status,version,totalAmount,noReceiptCount,applicant:{id,name,departmentId,departmentName},createdAt,updatedAt,submittedAt,currentTask}。currentTask为当前已激活pending节点{id,seqNo,name,approver:{id,name}}或null；已提交姓名来自冻结快照。totalAmount为精确两位小数字符串，零行或缺金额为null；noReceiptCount只计显式无票标记，不代表缺文件或已通过校验。无费用行/正文/原因/来源摘要/票据/未来节点。
+
+任务摘要为{id,seqNo,name,status,activatedAt,finishedAt,application:申请摘要}。pending只收实际当前人员且前序已通过、申请仍pending的已激活任务；handled只收本人approved/rejected，取消任务不计已办。同人两步按任务各计一条；task.status与application.status独立，例如已通过后撤回仍保留原通过结果。
+
+匿名/过期/停用会话401，有效待确认身份或无效部门403；管理员/财务角色不扩大本人范围，角色改变不替换冻结任务人员。所有成功响应no-store；列表只读，不自动标已读。组织锁后重验身份，条目/总数/版本/金额/无票数/当前节点同一SQL快照；后续动作仍须重读并验证taskId/version。类型/服务见reimbursement-lists.ts，HTTP边界见reimbursement-list-handlers.ts，完整说明见[REIMBURSEMENT_LISTS.md](REIMBURSEMENT_LISTS.md)。新增015索引；报销页面、重提和统计尚未实现。
