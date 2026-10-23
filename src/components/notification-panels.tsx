@@ -320,7 +320,9 @@ export function NotificationDetailPanel({ id }: { id: string }) {
             </p>
             <div className="actions">
               {item.target &&
-                ["travel", "purchase"].includes(item.target.type) &&
+                ["travel", "purchase", "reimbursement"].includes(
+                  item.target.type,
+                ) &&
                 !resource.error && (
                   <Link
                     className="button"

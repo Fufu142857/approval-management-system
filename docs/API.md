@@ -533,7 +533,7 @@ JPEG/PNG/PDF 校验实际文件内容、声明类型和文件名；单件10 MiB�
 
 ReimbursementRecord扩展草稿详情的status为五种状态、submittedAt为string|null。提交后仍返回固定字段/费用/精确合计/noReceiptCount；linkedApplications为提交时冻结的必要来源摘要，不查询后来源正文，也不赋予源附件/历史权限。workflow包含id/ruleVersion/submittedVersion/routeSnapshot/createdAt；routeSnapshot含policy、applicant、steps、totalAmount、independentReason、linkedApplications、noReceiptItems（id/reason）和attachmentEvidence（id/itemId/receiptNumber/mimeType/sizeBytes/sha256，无存储键）。tasks按seqNo，含id/name/approverId/status/createdAt/activatedAt/finishedAt；logs含id/taskId/actorId/action/opinion/result/applicationVersion/createdAt，按时间/id。
 
-详情与提交后票据仅本人或activatedAt非空的实际任务人员可读，未来blocked财务、管理员、新任负责人无特权。先持申请共享锁再重验授权；不存在、draft、无权访问统一404，身份检查同旧接口。附件响应及完整性校验沿用S4k，提交后没有上传/删除端点。通知target.type新增reimbursement，apiPath指向上述详情API；通知Web仍只给已存在的差旅/采购页面生成链接。报销审批动作已由S4m实现，见下节；列表已由S4n实现，UI尚未实现。
+详情与提交后票据仅本人或activatedAt非空的实际任务人员可读，未来blocked财务、管理员、新任负责人无特权。先持申请共享锁再重验授权；不存在、draft、无权访问统一404，身份检查同旧接口。附件响应及完整性校验沿用S4k，提交后没有上传/删除端点。通知target.type新增reimbursement，apiPath指向上述详情API；S4p通知Web已给差旅/采购/报销固定详情生成链接。报销审批动作已由S4m实现，见下节；列表后端已由S4n实现，S4o/S4p已接草稿/提交详情，列表审批UI尚未实现。
 
 服务在src/server/reimbursement-submission.ts，固定字段校验在src/lib/reimbursement-submission.ts、持久文件校验在src/server/reimbursement-submission-validation.ts，权限在reimbursement-access.ts。真实签名/锁责任见HUMAN_HANDOFF.md；无新迁移，沿用014。详情缺少实例404 NOT_FOUND，关联快照缺失409 SNAPSHOT_INCOMPLETE；不能回退为未经授权的实时源数据。
 
@@ -566,8 +566,12 @@ GET /api/reimbursement-applications 返回本人所有状态报销申请；GET /
 
 任务摘要为{id,seqNo,name,status,activatedAt,finishedAt,application:申请摘要}。pending只收实际当前人员且前序已通过、申请仍pending的已激活任务；handled只收本人approved/rejected，取消任务不计已办。同人两步按任务各计一条；task.status与application.status独立，例如已通过后撤回仍保留原通过结果。
 
-匿名/过期/停用会话401，有效待确认身份或无效部门403；管理员/财务角色不扩大本人范围，角色改变不替换冻结任务人员。所有成功响应no-store；列表只读，不自动标已读。组织锁后重验身份，条目/总数/版本/金额/无票数/当前节点同一SQL快照；后续动作仍须重读并验证taskId/version。类型/服务见reimbursement-lists.ts，HTTP边界见reimbursement-list-handlers.ts，完整说明见[REIMBURSEMENT_LISTS.md](REIMBURSEMENT_LISTS.md)。新增015索引；报销页面、重提和统计尚未实现。
+匿名/过期/停用会话401，有效待确认身份或无效部门403；管理员/财务角色不扩大本人范围，角色改变不替换冻结任务人员。所有成功响应no-store；列表只读，不自动标已读。组织锁后重验身份，条目/总数/版本/金额/无票数/当前节点同一SQL快照；后续动作仍须重读并验证taskId/version。类型/服务见reimbursement-lists.ts，HTTP边界见reimbursement-list-handlers.ts，完整说明见[REIMBURSEMENT_LISTS.md](REIMBURSEMENT_LISTS.md)。新增015索引；S4o/S4p已补报销草稿/提交详情，列表审批页面、重提和统计尚未实现。
 
 ## S4o 报销草稿Web接入
 
 本阶段未新增或改变HTTP契约。/reimbursement/new、/reimbursement/drafts、/reimbursement/drafts/:id接入S4j/S4k现有草稿、候选与票据接口；仅本人草稿可编辑，页面鉴权不替代API授权。表单PUT只带固定输入及稳定行ID，票据上传绑定已保存itemId、可选receiptNumber和最新version；文件操作不自动保存正文。细节与错误恢复见[WEB_REIMBURSEMENT.md](WEB_REIMBURSEMENT.md)。提交/提交后详情、报销列表动作及重提UI继续分步，后端已实现能力仍按上述S4l–S4n接口调用。
+
+## S4p 报销提交与只读详情Web接入
+
+无新HTTP契约或迁移。草稿页使用既有POST /api/reimbursement-drafts/:id/submit（只收version），先保存当前输入再提交；/reimbursement/applications/:id使用本节已实现详情与票据读取，正文/附件version和status必须匹配。通知固定映射加入reimbursement，不扩展正文/源单/附件权限。组件和失败恢复见WEB_REIMBURSEMENT_SUBMISSION.md。

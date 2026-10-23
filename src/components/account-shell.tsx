@@ -84,7 +84,9 @@ export function AccountShell({
   const title = reimbursement
     ? pathname === "/reimbursement/drafts"
       ? "我的申请"
-      : "报销申请"
+      : pathname.startsWith("/reimbursement/applications/")
+        ? "报销申请详情"
+        : "报销申请"
     : purchase
       ? taskList
         ? "我的待办"
@@ -113,7 +115,9 @@ export function AccountShell({
   const subtitle = reimbursement
     ? pathname === "/reimbursement/drafts"
       ? "管理本人报销草稿与费用票据"
-      : "填写费用、关联已批申请并保存票据"
+      : pathname.startsWith("/reimbursement/applications/")
+        ? "查看费用、关联来源、票据与审批记录"
+        : "填写费用、关联已批申请并提交报销"
     : purchase
       ? taskList
         ? "处理采购审批任务，查看已办记录"

@@ -82,7 +82,8 @@ export function AttachmentItems({
     | "travel-applications"
     | "purchase-drafts"
     | "purchase-applications"
-    | "reimbursement-drafts";
+    | "reimbursement-drafts"
+    | "reimbursement-applications";
   items: Attachment[];
   onDelete?: (file: Attachment) => void;
   disabled?: boolean;

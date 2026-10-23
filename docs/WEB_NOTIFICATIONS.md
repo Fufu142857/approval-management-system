@@ -10,7 +10,7 @@
 
 读取列表、进入通知详情或申请详情不会自动标记已读；需点击“标记已读”，POST 只发 {}。写入中按钮禁用并用引用互斥，成功或非鉴权失败后回查通知与计数，不乐观减少计数，不自动重放 POST。响应丢失时显示需核对的反馈；后端幂等保留首次阅读时间。写入不影响申请、待办和日志。
 
-title/kind 描述历史事件，target.status/task.status 描述本次查询的当前状态。旧“新待办”也可能已完成或取消，通知没有审批按钮。只在当前返回 target.type 为 travel 或 purchase 时用其 id 映射到对应固定业务详情页，不把 API 地址当导航 URL；target=null 不显示申请跳转。详情 GET 失败时隐藏跳转，正文页面和接口仍重新鉴权，再按最新 version/taskId 决定动作。
+title/kind 描述历史事件，target.status/task.status 描述本次查询的当前状态。旧“新待办”也可能已完成或取消，通知没有审批按钮。只在当前返回 target.type 为 travel、purchase 或 reimbursement 时用其 id 映射到对应固定业务详情页，不把 API 地址当导航 URL；target=null 不显示申请跳转。详情 GET 失败时隐藏跳转，正文页面和接口仍重新鉴权，再按最新 version/taskId 决定动作。
 
 通知列表 total 按当前筛选，unreadCount 是本人全量；进入通知列表/详情会立即刷新侧栏计数；侧栏独立计数和列表可能处于不同时点，不强行合成同一快照。新事件可能使偏移分页位移，刷新/返回第一页核对。不会因轮询把用户强制带回第一页。
 

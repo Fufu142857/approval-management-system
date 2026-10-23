@@ -42,7 +42,7 @@ S4e 采购列表的摘要字段和筛选在 API.md 定义：金额为数据库�
 
 S4f 采购 UI 约定见 WEB_PURCHASE.md：固定字段/行明确定义；PUT 只传输入字段并保留既有行 ID。金额预览先共享 schema 规范化再 BigInt 计算，不能直接拿未补零字符串调用 purchaseLineCents。附件绑定已保存报价 ID，写入递增同一申请 version；不得用文件操作的响应覆盖未保存表单。冲突或不确定写入保留输入并停止写入，人工核对后重读，不自动重试。
 
-S4g 固定采购完整字段校验集中在 src/lib/purchase-submission.ts；调用 purchaseSubmissionIssues 前必须用 purchaseDraftSchema 解析规范化。只检查字段与附件元数据，不替代服务端事务、身份、真实文件和配额验证。前端先保存当前内容，再使用返回的最新 version 提交；保存结果不确定不得继续提交，提交结果不确定须停止写入并核对详情。只读详情按版本/状态匹配正文与附件；未知报价金额明确显示无法比较。通知只对 travel/purchase 建立固定详情链接，每次进入正文/文件仍独立鉴权。
+S4g 固定采购完整字段校验集中在 src/lib/purchase-submission.ts；调用 purchaseSubmissionIssues 前必须用 purchaseDraftSchema 解析规范化。只检查字段与附件元数据，不替代服务端事务、身份、真实文件和配额验证。前端先保存当前内容，再使用返回的最新 version 提交；保存结果不确定不得继续提交，提交结果不确定须停止写入并核对详情。只读详情按版本/状态匹配正文与附件；未知报价金额明确显示无法比较。通知对 travel/purchase/reimbursement 建立固定详情链接，每次进入正文/文件仍独立鉴权。
 
 S4h 采购列表和动作 UI 见 WEB_PURCHASE_APPROVAL.md。列表显示的申请状态与节点结果分别保留；金额字符串/null 不通过 Number 重算，不跨业务合计。服务端传 viewerId 仅用于展示控制，API 仍独立授权；审批必须用当前实际 taskId 和最新 version，不从角色选取任务。动作成功重读正文与附件，不自动批准下一节点；冲突和不确定写入暂停、保留当前页意见，重读后再确认。类型切换导航到独立差旅/采购路由，重置筛选，不合并不同列表口径。
 
@@ -59,3 +59,5 @@ S4m报销动作使用专用reimbursementDecisionSchema/reimbursementWithdrawalSc
 S4n报销列表遵守REIMBURSEMENT_LISTS.md：独立固定类型接口，仅本人申请/实际任务，不能按当前角色或关联来源扩大权限；单SQL读取分页总数、版本、当前节点与精确金额/无票数。totalAmount保留string|null，不经Number；noReceiptCount只是显式标记数，不能推断提交有效或缺文件。来源/例外原因和票据不在摘要返回，查询不标记通知已读。后续动作仍须重新验证version/taskId。
 
 S4o报销草稿UI见WEB_REIMBURSEMENT.md：固定输入显式摘取，费用排序/编辑保留本单行ID，新增行不带ID；来源仅从本人已批候选选择，跨页保留，PUT重新核验。票据选择已保存的费用行，号码随上传而非草稿保存；含票据行先显式删文件再删行。附件操作只更新version/文件列表，不覆盖未保存正文/无票标记；未知写结果停写核对，不自动重放。精确预览使用reimbursementAmount的整数分算法。共享Pager/TravelFailure在表单内作为查询控件时必须type=button，不隐式提交。
+
+S4p报销提交/只读详情见WEB_REIMBURSEMENT_SUBMISSION.md：客户端先schema规范化再调用固定提交issues函数，确认后先保存再用最新version提交。正文/票据状态与版本不一致时不展示；冻结来源摘要不扩权或取源全文，财务无票例外须突出。未知写结果停写核对，通知不能替代详情/文件鉴权；不在该阶段加入审批按钮或动态配置。

@@ -324,7 +324,7 @@ test("报销三条费用、五类选项、精确合计与稳定行排序；票�
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "提交申请", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await expect(page.getByLabel("选择费用票据")).toBeDisabled();
   await page.locator("#title").fill(input.title);
   for (const key of ["description", "independentReason", "remarks"] as const)

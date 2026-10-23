@@ -23,6 +23,8 @@ import {
   type ReimbursementAttachment,
 } from "@/lib/reimbursement-attachments";
 import { ReimbursementSourcePicker } from "./reimbursement-source-picker";
+import { reimbursementSubmissionIssues } from "@/lib/reimbursement-submission";
+import type { ReimbursementDetail } from "@/lib/reimbursement-display";
 import {
   maxAttachmentBytes,
   maxAttachments,
@@ -54,6 +56,7 @@ export function ExistingReimbursementEditor({
       <div className="stack">
         <TravelFailure message={draft.error || files.error!} retry={reload} />
         <p className="hint">若已通过其他客户端提交，此处不能继续编辑。</p>
+        <Link href={`/reimbursement/applications/${id}`}>查看提交后详情</Link>
         <Link href="/reimbursement/drafts">返回报销草稿</Link>
       </div>
     );
@@ -96,7 +99,9 @@ export function ReimbursementEditor({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState(false);
-  const [confirm, setConfirm] = useState<"draft" | Attachment | null>(null);
+  const [confirm, setConfirm] = useState<
+    "submit" | "draft" | Attachment | null
+  >(null);
   const [selectedSources, setSelectedSources] = useState<
     ReimbursementLinkSummary[]
   >(initial?.linkedApplications ?? []);
@@ -155,6 +160,8 @@ export function ReimbursementEditor({
     } catch (error) {
       if (!handleSessionError(error)) {
         setError(errorMessage(error));
+        if (confirm === "submit")
+          setMessage("提交未确认完成，请核对错误说明和服务器记录。");
         if (error instanceof RequestError) {
           if (error.fieldErrors)
             setErrors(
@@ -193,10 +200,14 @@ export function ReimbursementEditor({
     if (details) details.open = true;
     target?.focus();
   }
-  function validate() {
+  function validate(complete = false) {
     setMessage("");
     const parsed = reimbursementDraftSchema.safeParse(form);
-    const issues = parsed.success ? [] : parsed.error.issues;
+    const issues = parsed.success
+      ? complete
+        ? reimbursementSubmissionIssues(parsed.data, files)
+        : []
+      : parsed.error.issues;
     if (issues.length) {
       const result: Record<string, string> = {};
       for (const issue of issues)
@@ -236,8 +247,23 @@ export function ReimbursementEditor({
     return saved;
   }
   async function confirmedAction() {
+    const data = confirm === "submit" ? validate(true) : undefined;
+    if (confirm === "submit" && !data) {
+      setConfirm(null);
+      return;
+    }
     await run(async () => {
-      if (confirm === "draft" && draft) {
+      if (confirm === "submit" && data) {
+        const saved = await save(data);
+        const result = await api<ReimbursementDetail>(
+          `/reimbursement-drafts/${saved.id}/submit`,
+          { method: "POST", body: JSON.stringify({ version: saved.version }) },
+        );
+        leaving.current = true;
+        window.location.replace(
+          `/reimbursement/applications/${result.application.id}`,
+        );
+      } else if (confirm === "draft" && draft) {
         await api(`/reimbursement-drafts/${draft.id}`, {
           method: "DELETE",
           body: JSON.stringify({ version: draft.version }),
@@ -416,6 +442,16 @@ export function ReimbursementEditor({
             >
               新窗口查看服务器记录
             </a>
+            {draft && (
+              <a
+                className="text-button"
+                target="_blank"
+                rel="noreferrer"
+                href={`/reimbursement/applications/${draft.id}`}
+              >
+                新窗口核对提交结果
+              </a>
+            )}
           </div>
         </Notice>
       )}
@@ -834,7 +870,7 @@ export function ReimbursementEditor({
             </Field>
             <div className="section-heading reimbursement-footer">
               <p className="hint">
-                草稿保存不代表已提交。报销提交页面尚未开放。
+                提交前会保存当前内容；提交后表单与票据不可修改。
               </p>
               <div className="actions">
                 {draft && (
@@ -852,8 +888,10 @@ export function ReimbursementEditor({
                 <button
                   type="button"
                   className="button"
-                  disabled
-                  title="提交页面尚未开放"
+                  onClick={() => {
+                    if (!locked.current && !blocked && validate(true))
+                      setConfirm("submit");
+                  }}
                 >
                   提交申请
                 </button>
@@ -864,15 +902,58 @@ export function ReimbursementEditor({
       </form>
       {confirm && (
         <TravelDialog
-          title={confirm === "draft" ? "确认删除草稿" : "确认删除票据"}
+          title={
+            confirm === "submit"
+              ? "确认提交报销申请"
+              : confirm === "draft"
+                ? "确认删除草稿"
+                : "确认删除票据"
+          }
           close={() => setConfirm(null)}
           busy={busy}
         >
           <p>
-            {confirm === "draft"
-              ? "将删除此草稿及其全部费用、关联和票据，此操作不能撤销。原关联申请保持不变。"
-              : `将删除票据“${confirm.originalName}”。`}
+            {confirm === "submit"
+              ? "将保存当前内容并提交审批。提交后不能修改费用、关联来源或票据。"
+              : confirm === "draft"
+                ? "将删除此草稿及其全部费用、关联和票据，此操作不能撤销。原关联申请保持不变。"
+                : `将删除票据“${confirm.originalName}”。`}
           </p>
+          {confirm === "submit" && (
+            <dl className="travel-details">
+              <div className="travel-span">
+                <dt>申请</dt>
+                <dd>
+                  {draft?.appNo ?? "保存时分配编号"} · {form.title}
+                </dd>
+              </div>
+              <div>
+                <dt>报销总额</dt>
+                <dd>{amounts.total} 元</dd>
+              </div>
+              <div>
+                <dt>无票支出</dt>
+                <dd>
+                  {form.items.filter((item) => item.noReceipt).length}{" "}
+                  项（已填写原因）
+                </dd>
+              </div>
+              <div className="travel-span">
+                <dt>关联来源</dt>
+                <dd>
+                  {selectedSources.length
+                    ? selectedSources
+                        .map((source) => `${source.appNo} · ${source.title}`)
+                        .join("；")
+                    : `独立报销：${form.independentReason}`}
+                </dd>
+              </div>
+              <div className="travel-span">
+                <dt>审批路径</dt>
+                <dd>部门负责人 → 财务审批人（实际人员提交时确定）</dd>
+              </div>
+            </dl>
+          )}
           <div className="actions">
             <button
               type="button"
@@ -888,7 +969,11 @@ export function ReimbursementEditor({
               disabled={busy}
               onClick={() => void confirmedAction()}
             >
-              {busy ? "处理中…" : "确认删除"}
+              {busy
+                ? "处理中…"
+                : confirm === "submit"
+                  ? "确认提交"
+                  : "确认删除"}
             </button>
           </div>
         </TravelDialog>

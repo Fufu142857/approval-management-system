@@ -2,6 +2,8 @@ import {
   reimbursementDraftSchema,
   type ReimbursementDraft,
   type ReimbursementDraftInput,
+  type ReimbursementRecord,
+  type ReimbursementLinkedApplication,
 } from "./reimbursement";
 
 export const reimbursementCategoryNames = {
@@ -62,3 +64,66 @@ export function reimbursementAmount(items: ReimbursementDraftInput["items"]) {
     overflow: cents > 99999999999999n,
   };
 }
+
+// HTTP representation of the fixed reimbursement workflow; no configurable fields.
+type SnapshotPerson = {
+  id: string;
+  name: string;
+  departmentId: string;
+  departmentName: string;
+};
+export type ReimbursementDetail = {
+  application: Omit<ReimbursementRecord, "status" | "submittedAt"> & {
+    status: "pending" | "approved" | "rejected" | "withdrawn";
+    submittedAt: string;
+  };
+  workflow: {
+    id: string;
+    ruleVersion: string;
+    submittedVersion: number;
+    createdAt: string;
+    routeSnapshot: {
+      ruleVersion: string;
+      policy: string;
+      applicant: SnapshotPerson;
+      totalAmount: string;
+      independentReason: string;
+      linkedApplications: ReimbursementLinkedApplication[];
+      noReceiptItems: { id: string; reason: string }[];
+      attachmentEvidence: {
+        id: string;
+        itemId: string;
+        receiptNumber: string;
+        mimeType: string;
+        sizeBytes: number;
+        sha256: string;
+      }[];
+      steps: {
+        seqNo: number;
+        name: string;
+        rule: string;
+        approver: SnapshotPerson;
+      }[];
+    };
+  };
+  tasks: {
+    id: string;
+    seqNo: number;
+    name: string;
+    approverId: string;
+    status: "blocked" | "pending" | "approved" | "rejected" | "cancelled";
+    createdAt: string;
+    activatedAt: string | null;
+    finishedAt: string | null;
+  }[];
+  logs: {
+    id: string;
+    taskId: string | null;
+    actorId: string;
+    action: "submitted" | "approved" | "rejected" | "withdrawn";
+    opinion: string;
+    result: "pending" | "approved" | "rejected" | "withdrawn";
+    applicationVersion: number;
+    createdAt: string;
+  }[];
+};
