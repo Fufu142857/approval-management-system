@@ -54,6 +54,11 @@ export function TravelListNavigation({
       >
         {mode === "applications" || mode === "drafts" ? "采购申请" : "采购任务"}
       </Link>
+      {(mode === "applications" || mode === "drafts") && (
+        <Link href="/reimbursement/drafts" prefetch={false}>
+          报销草稿
+        </Link>
+      )}
       {items.map(([key, href, label]) => (
         <Link
           key={key}

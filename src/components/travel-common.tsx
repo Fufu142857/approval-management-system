@@ -63,7 +63,7 @@ export function TravelFailure({
     <div className="stack">
       <Notice error>{message}</Notice>
       <div>
-        <button className="button secondary" onClick={retry}>
+        <button type="button" className="button secondary" onClick={retry}>
           重新加载
         </button>
       </div>
@@ -79,7 +79,10 @@ export function AttachmentItems({
 }: {
   appId: string;
   resource?:
-    "travel-applications" | "purchase-drafts" | "purchase-applications";
+    | "travel-applications"
+    | "purchase-drafts"
+    | "purchase-applications"
+    | "reimbursement-drafts";
   items: Attachment[];
   onDelete?: (file: Attachment) => void;
   disabled?: boolean;

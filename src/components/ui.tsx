@@ -71,6 +71,7 @@ export function Pager({
       </span>
       <div className="actions">
         <button
+          type="button"
           className="button secondary"
           disabled={busy || page <= 1}
           onClick={() => onChange(page - 1)}
@@ -78,6 +79,7 @@ export function Pager({
           上一页
         </button>
         <button
+          type="button"
           className="button secondary"
           disabled={busy || page * pageSize >= total}
           onClick={() => onChange(page + 1)}

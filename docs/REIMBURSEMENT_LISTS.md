@@ -23,4 +23,4 @@ totalAmount由PostgreSQL NUMERIC精确求和，返回两位小数字符串，不
 
 实现位于src/lib/reimbursement-lists.ts、src/server/reimbursement-lists.ts和reimbursement-list-handlers.ts。015_reimbursement_list_index.sql只新增报销本人创建时间部分索引，复用既有任务索引，不更新业务记录。测试覆盖权限、实际任务、终态/取消、同人两步、姓名快照、日期/字面量搜索、分页、精确金额、并发一致性、来源隔离及查询无副作用；真实HTTP及Web重启结果见STATUS.md。
 
-下一增量S4o为固定报销草稿与票据Web页面，界面前须复核外层Design.pdf和UI_GUIDELINES.md；提交详情、列表动作页面、重提与统计继续拆分。到S5仍停止整个项目代码修改并交棒。
+S4o已实现固定报销草稿与票据Web页面（WEB_REIMBURSEMENT.md），界面前须复核外层Design.pdf和UI_GUIDELINES.md；提交详情、列表动作页面、重提与统计继续拆分。到S5仍停止整个项目代码修改并交棒。

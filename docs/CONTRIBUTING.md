@@ -57,3 +57,5 @@ S4l报销提交只收version，先保存后提交；固定完整字段/逐行票
 S4m报销动作使用专用reimbursementDecisionSchema/reimbursementWithdrawalSchema与独立业务路由；不能把报销ID送入采购/差旅动作，不能用当前角色替换快照人员。任务必须属于当前申请/实际人员且为有效待办；本人与管理员无额外审批权。返回仍是S4l冻结来源摘要，不能为审批加入实时源正文查询。失败/不确定结果先GET核对，不自动重放；未来UI只能根据真实taskId/version和本次读取状态确认操作，取消任务不计已办。契约与通知接收人见REIMBURSEMENT_ACTIONS.md。
 
 S4n报销列表遵守REIMBURSEMENT_LISTS.md：独立固定类型接口，仅本人申请/实际任务，不能按当前角色或关联来源扩大权限；单SQL读取分页总数、版本、当前节点与精确金额/无票数。totalAmount保留string|null，不经Number；noReceiptCount只是显式标记数，不能推断提交有效或缺文件。来源/例外原因和票据不在摘要返回，查询不标记通知已读。后续动作仍须重新验证version/taskId。
+
+S4o报销草稿UI见WEB_REIMBURSEMENT.md：固定输入显式摘取，费用排序/编辑保留本单行ID，新增行不带ID；来源仅从本人已批候选选择，跨页保留，PUT重新核验。票据选择已保存的费用行，号码随上传而非草稿保存；含票据行先显式删文件再删行。附件操作只更新version/文件列表，不覆盖未保存正文/无票标记；未知写结果停写核对，不自动重放。精确预览使用reimbursementAmount的整数分算法。共享Pager/TravelFailure在表单内作为查询控件时必须type=button，不隐式提交。

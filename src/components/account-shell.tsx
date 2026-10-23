@@ -75,59 +75,68 @@ export function AccountShell({
     { label: "通知中心", icon: "bell" },
   ];
   const management = pathname.startsWith("/admin/");
+  const reimbursement = pathname.startsWith("/reimbursement/");
   const purchase = pathname.startsWith("/purchase/");
   const travel = pathname.startsWith("/travel/");
   const taskList =
     pathname.startsWith("/travel/tasks") ||
     pathname.startsWith("/purchase/tasks");
-  const title = purchase
-    ? taskList
-      ? "我的待办"
-      : ["/purchase/drafts", "/purchase/applications"].includes(pathname)
-        ? "我的申请"
-        : pathname.startsWith("/purchase/applications/")
-          ? "采购申请详情"
-          : "采购申请"
-    : notifications
-      ? pathname === "/notifications"
-        ? "通知中心"
-        : "通知详情"
-      : taskList
+  const title = reimbursement
+    ? pathname === "/reimbursement/drafts"
+      ? "我的申请"
+      : "报销申请"
+    : purchase
+      ? taskList
         ? "我的待办"
-        : travel
-          ? ["/travel/drafts", "/travel/applications"].includes(pathname)
-            ? "我的申请"
-            : pathname.startsWith("/travel/applications/")
-              ? "差旅申请详情"
-              : "差旅申请"
-          : pathname === "/admin/users"
-            ? "用户管理"
-            : pathname === "/admin/audit"
-              ? "操作审计"
-              : "个人信息";
-  const subtitle = purchase
-    ? taskList
-      ? "处理采购审批任务，查看已办记录"
-      : ["/purchase/drafts", "/purchase/applications"].includes(pathname)
-        ? "查询本人采购申请，管理草稿与审批进度"
-        : pathname.startsWith("/purchase/applications/")
-          ? "查看采购内容、审批进度与历史记录"
-          : "填写采购信息，提交后进入审批流程"
-    : notifications
-      ? "查看待办与审批结果，管理阅读状态"
-      : taskList
-        ? "处理当前审批任务，查看已办记录"
-        : travel
-          ? ["/travel/drafts", "/travel/applications"].includes(pathname)
-            ? "查询本人申请，管理草稿与审批进度"
-            : pathname.startsWith("/travel/applications/")
-              ? "查看申请内容、审批进度与历史记录"
-              : "填写差旅信息，提交后进入审批流程"
-          : pathname === "/admin/users"
-            ? "维护用户的部门归属与角色权限"
-            : pathname === "/admin/audit"
-              ? "查看授权与配置变更记录"
-              : "查看个人资料、部门与角色权限";
+        : ["/purchase/drafts", "/purchase/applications"].includes(pathname)
+          ? "我的申请"
+          : pathname.startsWith("/purchase/applications/")
+            ? "采购申请详情"
+            : "采购申请"
+      : notifications
+        ? pathname === "/notifications"
+          ? "通知中心"
+          : "通知详情"
+        : taskList
+          ? "我的待办"
+          : travel
+            ? ["/travel/drafts", "/travel/applications"].includes(pathname)
+              ? "我的申请"
+              : pathname.startsWith("/travel/applications/")
+                ? "差旅申请详情"
+                : "差旅申请"
+            : pathname === "/admin/users"
+              ? "用户管理"
+              : pathname === "/admin/audit"
+                ? "操作审计"
+                : "个人信息";
+  const subtitle = reimbursement
+    ? pathname === "/reimbursement/drafts"
+      ? "管理本人报销草稿与费用票据"
+      : "填写费用、关联已批申请并保存票据"
+    : purchase
+      ? taskList
+        ? "处理采购审批任务，查看已办记录"
+        : ["/purchase/drafts", "/purchase/applications"].includes(pathname)
+          ? "查询本人采购申请，管理草稿与审批进度"
+          : pathname.startsWith("/purchase/applications/")
+            ? "查看采购内容、审批进度与历史记录"
+            : "填写采购信息，提交后进入审批流程"
+      : notifications
+        ? "查看待办与审批结果，管理阅读状态"
+        : taskList
+          ? "处理当前审批任务，查看已办记录"
+          : travel
+            ? ["/travel/drafts", "/travel/applications"].includes(pathname)
+              ? "查询本人申请，管理草稿与审批进度"
+              : pathname.startsWith("/travel/applications/")
+                ? "查看申请内容、审批进度与历史记录"
+                : "填写差旅信息，提交后进入审批流程"
+            : pathname === "/admin/users"
+              ? "维护用户的部门归属与角色权限"
+              : pathname === "/admin/audit"
+                ? "查看授权与配置变更记录"
+                : "查看个人资料、部门与角色权限";
   return (
     <NotificationContext
       value={{ enabled: notificationsEnabled, refreshCount: unread.refresh }}
@@ -150,9 +159,11 @@ export function AccountShell({
                   className="nav-item"
                   href={
                     link.label === "我的申请"
-                      ? purchase
-                        ? "/purchase/applications"
-                        : "/travel/applications"
+                      ? reimbursement
+                        ? "/reimbursement/drafts"
+                        : purchase
+                          ? "/purchase/applications"
+                          : "/travel/applications"
                       : link.label === "我的待办"
                         ? purchase
                           ? "/purchase/tasks"
@@ -166,7 +177,7 @@ export function AccountShell({
                         ? notifications
                         : link.label === "我的待办"
                           ? taskList
-                          : (travel || purchase) && !taskList
+                          : (travel || purchase || reimbursement) && !taskList
                     )
                       ? "page"
                       : undefined

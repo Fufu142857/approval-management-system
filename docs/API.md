@@ -567,3 +567,7 @@ GET /api/reimbursement-applications 返回本人所有状态报销申请；GET /
 任务摘要为{id,seqNo,name,status,activatedAt,finishedAt,application:申请摘要}。pending只收实际当前人员且前序已通过、申请仍pending的已激活任务；handled只收本人approved/rejected，取消任务不计已办。同人两步按任务各计一条；task.status与application.status独立，例如已通过后撤回仍保留原通过结果。
 
 匿名/过期/停用会话401，有效待确认身份或无效部门403；管理员/财务角色不扩大本人范围，角色改变不替换冻结任务人员。所有成功响应no-store；列表只读，不自动标已读。组织锁后重验身份，条目/总数/版本/金额/无票数/当前节点同一SQL快照；后续动作仍须重读并验证taskId/version。类型/服务见reimbursement-lists.ts，HTTP边界见reimbursement-list-handlers.ts，完整说明见[REIMBURSEMENT_LISTS.md](REIMBURSEMENT_LISTS.md)。新增015索引；报销页面、重提和统计尚未实现。
+
+## S4o 报销草稿Web接入
+
+本阶段未新增或改变HTTP契约。/reimbursement/new、/reimbursement/drafts、/reimbursement/drafts/:id接入S4j/S4k现有草稿、候选与票据接口；仅本人草稿可编辑，页面鉴权不替代API授权。表单PUT只带固定输入及稳定行ID，票据上传绑定已保存itemId、可选receiptNumber和最新version；文件操作不自动保存正文。细节与错误恢复见[WEB_REIMBURSEMENT.md](WEB_REIMBURSEMENT.md)。提交/提交后详情、报销列表动作及重提UI继续分步，后端已实现能力仍按上述S4l–S4n接口调用。

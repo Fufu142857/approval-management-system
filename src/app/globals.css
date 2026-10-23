@@ -1474,3 +1474,72 @@ summary {
     color: #888;
   }
 }
+
+/* Fixed reimbursement uses the existing form panels and monochrome controls. */
+.reimbursement-source-filter {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(160px, 2fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+.reimbursement-source-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.reimbursement-source-list li {
+  border-bottom: 1px solid var(--line);
+  padding: 6px 0;
+  overflow-wrap: anywhere;
+}
+.reimbursement-source-list .section-heading a {
+  flex: 1;
+  min-width: 0;
+}
+.reimbursement-sources {
+  margin-bottom: 16px;
+}
+.reimbursement-item-table {
+  min-width: 1000px;
+  table-layout: fixed;
+}
+.reimbursement-item-table th:first-child {
+  width: 48px;
+}
+.reimbursement-item-table th:nth-child(2) {
+  width: 106px;
+}
+.reimbursement-item-table th:nth-child(3) {
+  width: 150px;
+}
+.reimbursement-item-table th:nth-child(5) {
+  width: 150px;
+}
+.reimbursement-item-table th:nth-child(6) {
+  width: 220px;
+}
+.reimbursement-item-table th:last-child {
+  width: 72px;
+}
+.reimbursement-row-actions {
+  display: grid;
+  gap: 8px;
+}
+.reimbursement-receipt {
+  padding-top: 8px;
+}
+.reimbursement-footer {
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.reimbursement-workspace .table-scroll .reimbursement-item-table {
+  min-width: 1000px;
+}
+@media (max-width: 700px) {
+  .reimbursement-source-filter {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .reimbursement-sources .pager {
+    flex-wrap: wrap;
+  }
+}
