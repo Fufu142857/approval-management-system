@@ -2106,6 +2106,238 @@ try {
   ).body.data;
   assert.equal(submittedExpenseFiles.version, 5);
   assert.deepEqual(submittedExpenseFiles.items, submissionFiles);
+  // S4m: real terminal decisions at both nodes, frozen sources/receipts and history permissions.
+  const reimbursementTerminals = [];
+  for (const action of [
+    "approve",
+    "reject-first",
+    "reject-last",
+    "withdraw-first",
+    "withdraw-last",
+  ]) {
+    const created = await call(
+      "reimbursement-drafts",
+      "POST",
+      {
+        ...expenseFields,
+        title: `报销动作HTTP-${action}`,
+        items: expenseFields.items.map((item, index) => ({
+          ...item,
+          noReceipt: index !== 0,
+          noReceiptReason: index === 0 ? "" : "已声明无票原因",
+        })),
+      },
+      token,
+    );
+    assert.equal(created.response.status, 201);
+    const saved = created.body.data;
+    const form = new FormData();
+    form.set("file", new File([png], "费用票据.png", { type: "image/png" }));
+    form.set("version", "1");
+    form.set("receiptNumber", `ACTION-${action}`);
+    const uploaded = await fetch(
+      `${origin}/api/reimbursement-drafts/${saved.id}/items/${saved.items[0].id}/attachments`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, Origin: origin },
+        body: form,
+      },
+    );
+    assert.equal(uploaded.status, 201);
+    const file = (await uploaded.json()).data.attachment;
+    const submission = await call(
+      `reimbursement-drafts/${saved.id}/submit`,
+      "POST",
+      { version: 2 },
+      token,
+    );
+    assert.equal(submission.response.status, 200);
+    const initial = submission.body.data;
+    const path = `reimbursement-applications/${saved.id}`;
+    const decisionPath = (value, index) =>
+      `${path}/tasks/${value.tasks[index].id}/decision`;
+    assert.equal(
+      (
+        await call(
+          decisionPath(initial, 0),
+          "POST",
+          { version: 3, decision: "approve" },
+          token,
+        )
+      ).response.status,
+      403,
+    );
+    assert.equal(
+      (
+        await call(
+          decisionPath(initial, 0),
+          "POST",
+          { version: 3, decision: "approve" },
+          companyHead.token,
+        )
+      ).response.status,
+      404,
+    );
+    assert.equal(
+      (
+        await call(
+          decisionPath(initial, 1),
+          "POST",
+          { version: 3, decision: "approve" },
+          finance.token,
+        )
+      ).response.status,
+      409,
+    );
+    assert.equal(
+      (
+        await call(
+          decisionPath(initial, 0),
+          "POST",
+          { version: 3, decision: "reject", opinion: " " },
+          head.token,
+        )
+      ).response.status,
+      400,
+    );
+    assert.equal(
+      (await call(`${path}/withdraw`, "POST", { version: 2 }, token)).response
+        .status,
+      409,
+    );
+    let current = initial;
+    const financeActivated = [
+      "approve",
+      "reject-last",
+      "withdraw-last",
+    ].includes(action);
+    if (financeActivated) {
+      const first = await call(
+        decisionPath(current, 0),
+        "POST",
+        {
+          version: current.application.version,
+          decision: "approve",
+          opinion: "部门核验",
+        },
+        head.token,
+      );
+      assert.equal(first.response.status, 200);
+      current = first.body.data;
+      assert.deepEqual(
+        current.tasks.map((task) => task.status),
+        ["approved", "pending"],
+      );
+    }
+    const index = financeActivated ? 1 : 0;
+    const result = action.startsWith("withdraw")
+      ? await call(
+          `${path}/withdraw`,
+          "POST",
+          { version: current.application.version, opinion: "本人撤回" },
+          token,
+        )
+      : await call(
+          decisionPath(current, index),
+          "POST",
+          {
+            version: current.application.version,
+            decision: action === "approve" ? "approve" : "reject",
+            opinion: "财务或部门核验意见",
+          },
+          financeActivated ? finance.token : head.token,
+        );
+    assert.equal(result.response.status, 200);
+    const terminal = result.body.data;
+    assert.equal(
+      terminal.application.status,
+      action === "approve"
+        ? "approved"
+        : action.startsWith("reject")
+          ? "rejected"
+          : "withdrawn",
+    );
+    assert.equal(terminal.application.version, current.application.version + 1);
+    assert.deepEqual(terminal.workflow, initial.workflow);
+    for (const field of [
+      "items",
+      "linkedApplications",
+      "linkedApplicationIds",
+      "totalAmount",
+      "noReceiptCount",
+      "submittedAt",
+      "independentReason",
+      "remarks",
+    ])
+      assert.deepEqual(terminal.application[field], initial.application[field]);
+    assert.equal(
+      (
+        await call(
+          `${path}/withdraw`,
+          "POST",
+          { version: terminal.application.version },
+          token,
+        )
+      ).response.status,
+      409,
+    );
+    assert.equal(
+      (
+        await call(
+          decisionPath(terminal, 0),
+          "POST",
+          { version: terminal.application.version, decision: "approve" },
+          head.token,
+        )
+      ).response.status,
+      409,
+    );
+    const terminalNotices = [];
+    for (const actorToken of [token, head.token, finance.token]) {
+      const inbox = await call(
+        "notifications?pageSize=100",
+        "GET",
+        undefined,
+        actorToken,
+      );
+      const owned = inbox.body.data.items.filter(
+        (notice) => notice.appId === saved.id,
+      );
+      assert.equal(
+        owned.length,
+        actorToken === finance.token && !financeActivated
+          ? 0
+          : actorToken === token
+            ? 1
+            : action.startsWith("withdraw")
+              ? 2
+              : 1,
+      );
+      for (const notice of owned) {
+        assert.equal(notice.target.status, terminal.application.status);
+        if (notice.task) assert.notEqual(notice.task.status, "pending");
+        terminalNotices.push({
+          actorToken,
+          id: notice.id,
+          detail: (
+            await call(
+              `notifications/${notice.id}`,
+              "GET",
+              undefined,
+              actorToken,
+            )
+          ).body.data,
+        });
+      }
+    }
+    reimbursementTerminals.push({
+      path,
+      terminal,
+      file,
+      financeActivated,
+      notices: terminalNotices,
+    });
+  }
   const purchaseRelationBefore = (
     await call(purchaseRetryPath, "GET", undefined, token)
   ).body.data;
@@ -2113,6 +2345,64 @@ try {
   await server.closed;
   server = startServer();
   await ready();
+  for (const entry of reimbursementTerminals) {
+    for (const actorToken of [
+      token,
+      head.token,
+      finance.token,
+      companyHead.token,
+    ]) {
+      const allowed =
+        actorToken === token ||
+        actorToken === head.token ||
+        (actorToken === finance.token && entry.financeActivated);
+      const actual = await call(entry.path, "GET", undefined, actorToken);
+      assert.equal(actual.response.status, allowed ? 200 : 404);
+      if (allowed) assert.deepEqual(actual.body.data, entry.terminal);
+      const listing = await call(
+        `${entry.path}/attachments`,
+        "GET",
+        undefined,
+        actorToken,
+      );
+      assert.equal(listing.response.status, allowed ? 200 : 404);
+      if (allowed) {
+        assert.deepEqual(listing.body.data.items, [entry.file]);
+        assert.equal(
+          listing.body.data.status,
+          entry.terminal.application.status,
+        );
+        assert.equal(
+          listing.body.data.version,
+          entry.terminal.application.version,
+        );
+      }
+      const response = await fetch(
+        `${origin}/api/${entry.path}/attachments/${entry.file.id}/content`,
+        { headers: { Authorization: `Bearer ${actorToken}` } },
+      );
+      assert.equal(response.status, allowed ? 200 : 404);
+      if (allowed)
+        assert.deepEqual(Buffer.from(await response.arrayBuffer()), png);
+    }
+    assert.equal(
+      (await call(entry.path, "GET", undefined, undefined, cookie)).response
+        .status,
+      404,
+    );
+    for (const notice of entry.notices)
+      assert.deepEqual(
+        (
+          await call(
+            `notifications/${notice.id}`,
+            "GET",
+            undefined,
+            notice.actorToken,
+          )
+        ).body.data,
+        notice.detail,
+      );
+  }
   assert.deepEqual(
     (await call(purchaseRetryPath, "GET", undefined, token)).body.data,
     purchaseRelationBefore,
@@ -2290,7 +2580,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; reimbursement submission/receipt completeness/finance snapshots/frozen source summaries/submitted authorization/notice and file persistence; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; reimbursement submission/receipt completeness/finance snapshots/frozen source summaries/submitted authorization/notice and file persistence; reimbursement two-step approval/rejection/withdrawal at both nodes, terminal history authorization/frozen evidence/notifications and receipt bytes after restart; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

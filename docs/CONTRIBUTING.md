@@ -53,3 +53,5 @@ S4j 报销固定字段/关联规则见 REIMBURSEMENT_DRAFTS.md。草稿可不完
 S4k 报销票据绑定已保存的itemId；元数据与号码不可改绑，号码错误按显式删除/重传处理。上传/删除只更新申请版本，不保存正文或自动改变noReceipt；草稿PUT省略有票据行返回ITEM_HAS_ATTACHMENTS。每记录只能属于本单一个明细，不把号码相同或文件相同检测宣称为已实现。锁顺序、配额与回收沿用附件协议，具体见 REIMBURSEMENT_ATTACHMENTS.md。后续提交必须在事务内验证真实文件、每行票据/无票例外及有效明细，草稿保存不是完整性校验。
 
 S4l报销提交只收version，先保存后提交；固定完整字段/逐行票据例外校验见reimbursement-submission.ts。提交事务重验来源资格、所有原文件、配额和整数分总额，不能把前端issues函数当作授权或文件检查。关联来源的必要摘要提交时冻结，提交后读取不得按报销权限查询源全文或原附件。noReceiptCount/原因如实保留，后续财务UI应突出例外；不自动补票或更改用户标记。审批采用固定财务第二步，任何失败先核对真实状态，不自动重放提交。
+
+S4m报销动作使用专用reimbursementDecisionSchema/reimbursementWithdrawalSchema与独立业务路由；不能把报销ID送入采购/差旅动作，不能用当前角色替换快照人员。任务必须属于当前申请/实际人员且为有效待办；本人与管理员无额外审批权。返回仍是S4l冻结来源摘要，不能为审批加入实时源正文查询。失败/不确定结果先GET核对，不自动重放；未来UI只能根据真实taskId/version和本次读取状态确认操作，取消任务不计已办。契约与通知接收人见REIMBURSEMENT_ACTIONS.md。

@@ -1,6 +1,6 @@
 # S4j 固定报销草稿后端
 
-本阶段只有数据模型与 HTTP API，没有报销页面、审批动作、复制重提或统计；S4l已补提交完整校验和提交后读取，见REIMBURSEMENT_SUBMISSION.md。票据上传/读取/删除已由S4k补齐，见REIMBURSEMENT_ATTACHMENTS.md。入口/参数/类型见 API.md。S4k 已接同单费用明细的票据附件，不一次完成整条报销流程。
+本阶段只有数据模型与 HTTP API，没有报销页面、复制重提或统计；审批动作已由S4m补齐，见REIMBURSEMENT_ACTIONS.md；S4l已补提交完整校验和提交后读取，见REIMBURSEMENT_SUBMISSION.md。票据上传/读取/删除已由S4k补齐，见REIMBURSEMENT_ATTACHMENTS.md。入口/参数/类型见 API.md。S4k 已接同单费用明细的票据附件，不一次完成整条报销流程。
 
 ## 固定字段与金额
 

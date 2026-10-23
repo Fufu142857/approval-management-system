@@ -533,6 +533,25 @@ JPEG/PNG/PDF 校验实际文件内容、声明类型和文件名；单件10 MiB�
 
 ReimbursementRecord扩展草稿详情的status为五种状态、submittedAt为string|null。提交后仍返回固定字段/费用/精确合计/noReceiptCount；linkedApplications为提交时冻结的必要来源摘要，不查询后来源正文，也不赋予源附件/历史权限。workflow包含id/ruleVersion/submittedVersion/routeSnapshot/createdAt；routeSnapshot含policy、applicant、steps、totalAmount、independentReason、linkedApplications、noReceiptItems（id/reason）和attachmentEvidence（id/itemId/receiptNumber/mimeType/sizeBytes/sha256，无存储键）。tasks按seqNo，含id/name/approverId/status/createdAt/activatedAt/finishedAt；logs含id/taskId/actorId/action/opinion/result/applicationVersion/createdAt，按时间/id。
 
-详情与提交后票据仅本人或activatedAt非空的实际任务人员可读，未来blocked财务、管理员、新任负责人无特权。先持申请共享锁再重验授权；不存在、draft、无权访问统一404，身份检查同旧接口。附件响应及完整性校验沿用S4k，提交后没有上传/删除端点。通知target.type新增reimbursement，apiPath指向上述详情API；通知Web仍只给已存在的差旅/采购页面生成链接。报销审批动作/列表/UI尚未实现。
+详情与提交后票据仅本人或activatedAt非空的实际任务人员可读，未来blocked财务、管理员、新任负责人无特权。先持申请共享锁再重验授权；不存在、draft、无权访问统一404，身份检查同旧接口。附件响应及完整性校验沿用S4k，提交后没有上传/删除端点。通知target.type新增reimbursement，apiPath指向上述详情API；通知Web仍只给已存在的差旅/采购页面生成链接。报销审批动作已由S4m实现，见下节；列表/UI尚未实现。
 
 服务在src/server/reimbursement-submission.ts，固定字段校验在src/lib/reimbursement-submission.ts、持久文件校验在src/server/reimbursement-submission-validation.ts，权限在reimbursement-access.ts。真实签名/锁责任见HUMAN_HANDOFF.md；无新迁移，沿用014。详情缺少实例404 NOT_FOUND，关联快照缺失409 SNAPSHOT_INCOMPLETE；不能回退为未经授权的实时源数据。
+
+## S4m 固定报销审批动作
+
+| 方法与路径                                                      | 严格 JSON 输入                                           | 成功响应                                      |
+| --------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------- |
+| POST /api/reimbursement-applications/:id/tasks/:taskId/decision | `{ version, decision: "approve" \| "reject", opinion? }` | 200；`{ application, workflow, tasks, logs }` |
+| POST /api/reimbursement-applications/:id/withdraw               | `{ version, opinion? }`                                  | 200；同上                                     |
+
+id/taskId 必须 UUID，version 为 1–2147483647 的整数；opinion 去首尾空白，最多2000字符、默认空，reject 必须非空。禁止未知 JSON 字段和全部查询参数，正文上限16 KiB，Cookie同源/Bearer与现有接口一致；客户端不得传金额、费用、例外标记、申请人或审批人。
+
+决策只允许有效身份的当前实际 pending 节点人员，且所有前序已通过；申请人自审403 SELF_APPROVAL，无权/不存在/跨业务申请或不属于本人的任务404 NOT_FOUND。未来节点、旧任务409 TASK_NOT_PENDING；终态/非pending/异常后续状态409 STATE_CHANGED，旧版本409 VERSION_CONFLICT，版本上限409 VERSION_LIMIT。匿名或失效会话401，待确认/失效部门403，输入400 VALIDATION_ERROR，超限413，错误媒体类型415；详见公共错误约定。
+
+approve 沿提交时固定部门→财务快照执行：首步激活原财务，末步将申请设为approved；reject 必填理由，将申请设为rejected并取消未办。下一快照人员停用、部门无效或为申请人，批准409 APPROVER_UNAVAILABLE且事务整体回滚；不重算当前角色、不改派人员，仍可驳回或本人撤回。
+
+本人可在任一pending节点withdraw，非本人404；成功为withdrawn，取消pending/blocked任务，保留已办结果及所有历史。两接口成功均version+1并更新updatedAt，状态/任务/日志/通知原子提交；submittedAt、固定正文/金额/费用/无票原因/来源摘要、票据和workflow快照不变。动作返回的来源摘要继续取冻结证据，不按报销权限访问实时源单。
+
+新待办通知下一实际人员，通过/驳回通知申请人，撤回通知申请人及曾激活人员并按人去重。未激活财务无撤回通知/正文/票据权限；已激活人员在有效身份下保留终态历史读取权。通知target/task展示当前状态，已读标记不受动作影响。失败或响应丢失先GET核对，不自动重放；重复操作不追加日志或通知。
+
+类型/schema在src/lib/reimbursement-actions.ts，事务服务在src/server/reimbursement-actions.ts，HTTP边界在reimbursement-action-handlers.ts，详细锁与调用责任见HUMAN_HANDOFF.md。本阶段无新迁移，仍014；尚无报销列表、审批页面或复制重提。
