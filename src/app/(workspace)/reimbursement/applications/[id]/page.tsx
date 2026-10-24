@@ -7,8 +7,8 @@ export default async function Page({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireBusinessPageUser();
+  const user = await requireBusinessPageUser();
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
-  return <ReimbursementDetail key={id} id={id} />;
+  return <ReimbursementDetail key={id} id={id} viewerId={user.id} />;
 }

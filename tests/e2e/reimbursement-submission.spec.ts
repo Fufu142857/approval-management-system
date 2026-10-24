@@ -68,14 +68,8 @@ async function readonly(page: Page) {
   await expect(
     page.getByRole("heading", { name: "审批进度", exact: true }),
   ).toBeVisible();
-  for (const name of [
-    "保存草稿",
-    "提交申请",
-    "通过",
-    "驳回",
-    "撤回申请",
-    "复制重提",
-  ])
+  // S4q adds permission-bound actions; submitted form and receipts remain frozen.
+  for (const name of ["保存草稿", "提交申请", "复制重提"])
     await expect(button(page, name)).toHaveCount(0);
   await expect(page.locator('input[type="file"]')).toHaveCount(0);
 }

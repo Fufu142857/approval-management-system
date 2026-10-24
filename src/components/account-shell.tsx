@@ -80,13 +80,18 @@ export function AccountShell({
   const travel = pathname.startsWith("/travel/");
   const taskList =
     pathname.startsWith("/travel/tasks") ||
-    pathname.startsWith("/purchase/tasks");
+    pathname.startsWith("/purchase/tasks") ||
+    pathname.startsWith("/reimbursement/tasks");
   const title = reimbursement
-    ? pathname === "/reimbursement/drafts"
-      ? "我的申请"
-      : pathname.startsWith("/reimbursement/applications/")
-        ? "报销申请详情"
-        : "报销申请"
+    ? taskList
+      ? "我的待办"
+      : ["/reimbursement/drafts", "/reimbursement/applications"].includes(
+            pathname,
+          )
+        ? "我的申请"
+        : pathname.startsWith("/reimbursement/applications/")
+          ? "报销申请详情"
+          : "报销申请"
     : purchase
       ? taskList
         ? "我的待办"
@@ -113,11 +118,15 @@ export function AccountShell({
                 ? "操作审计"
                 : "个人信息";
   const subtitle = reimbursement
-    ? pathname === "/reimbursement/drafts"
-      ? "管理本人报销草稿与费用票据"
-      : pathname.startsWith("/reimbursement/applications/")
-        ? "查看费用、关联来源、票据与审批记录"
-        : "填写费用、关联已批申请并提交报销"
+    ? taskList
+      ? "处理报销审批任务，查看已办记录"
+      : ["/reimbursement/drafts", "/reimbursement/applications"].includes(
+            pathname,
+          )
+        ? "查询本人报销申请，管理草稿与审批进度"
+        : pathname.startsWith("/reimbursement/applications/")
+          ? "查看费用、关联来源、票据与审批记录"
+          : "填写费用、关联已批申请并提交报销"
     : purchase
       ? taskList
         ? "处理采购审批任务，查看已办记录"
@@ -164,14 +173,16 @@ export function AccountShell({
                   href={
                     link.label === "我的申请"
                       ? reimbursement
-                        ? "/reimbursement/drafts"
+                        ? "/reimbursement/applications"
                         : purchase
                           ? "/purchase/applications"
                           : "/travel/applications"
                       : link.label === "我的待办"
-                        ? purchase
-                          ? "/purchase/tasks"
-                          : "/travel/tasks"
+                        ? reimbursement
+                          ? "/reimbursement/tasks"
+                          : purchase
+                            ? "/purchase/tasks"
+                            : "/travel/tasks"
                         : "/notifications"
                   }
                   prefetch={false}

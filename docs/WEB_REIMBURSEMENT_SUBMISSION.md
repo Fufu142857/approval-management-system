@@ -1,6 +1,6 @@
 # S4p 固定报销提交与只读详情
 
-本阶段接入现有 S4l/S4m 服务，不增加 HTTP 接口或迁移，数据库仍为015。草稿见 WEB_REIMBURSEMENT.md；提交规则见 REIMBURSEMENT_SUBMISSION.md；动作后端见 REIMBURSEMENT_ACTIONS.md。报销全状态/任务列表与审批操作页面留到 S4q，复制重提和统计继续分步，到 S5 停止全项目代码修改。
+本阶段接入现有 S4l/S4m 服务，不增加 HTTP 接口或迁移，数据库仍为015。草稿见 WEB_REIMBURSEMENT.md；提交规则见 REIMBURSEMENT_SUBMISSION.md；动作后端见 REIMBURSEMENT_ACTIONS.md。S4q已另行接入报销全状态/任务列表与审批操作页面，见WEB_REIMBURSEMENT_APPROVAL.md，复制重提和统计继续分步，到 S5 停止全项目代码修改。
 
 ## 提交与失败恢复
 
@@ -18,13 +18,13 @@
 
 关联区域只使用 routeSnapshot.linkedApplications 中提交时冻结的必要摘要：差旅行程/日期/预算、采购预算/总额，以及来源编号/标题/提交时间。独立说明也从快照显示。没有实时获取源全文、附件或提供来源跳转，报销审批权限不能扩大源单权限。
 
-逐项 JPEG/PNG 预览、PDF.js 翻页与下载使用 reimbursement-applications 专用鉴权路径，下载保留原字节，号码为空如实显示。失败可再次发起明确的只读请求，不把文件不可读解释为没有票据。没有上传/删除/修改/审批/撤回/重提控件。通过、驳回、撤回后刷新仍可显示冻结内容和历史；取消节点区分曾激活与未开始，并显示取消时间。本人及曾激活实际人员的权限由服务端控制，未激活财务、管理员和他人没有额外权限。
+逐项 JPEG/PNG 预览、PDF.js 翻页与下载使用 reimbursement-applications 专用鉴权路径，下载保留原字节，号码为空如实显示。失败可再次发起明确的只读请求，不把文件不可读解释为没有票据。没有上传/删除/修改/重提控件；S4q已另行按实际节点/本人权限开放审批/撤回。通过、驳回、撤回后刷新仍可显示冻结内容和历史；取消节点区分曾激活与未开始，并显示取消时间。本人及曾激活实际人员的权限由服务端控制，未激活财务、管理员和他人没有额外权限。
 
 ## 通知与真实签名
 
 NotificationDetailPanel 的固定详情映射增加 reimbursement，仍只用已授权 target.type/id，不将 apiPath 当导航 URL；target 不可读或通知请求失败时不开放跳转。读取通知/跳转不自动标记已读，每次进入详情/文件重新鉴权，旧通知不赋予动作权限。
 
-src/lib/reimbursement-display.ts 新增 ReimbursementDetail HTTP 展示类型，明确固定申请、routeSnapshot、tasks、logs；不引入动态字段解释器或客户端服务端模块依赖。ReimbursementDetail({id:string}) 在 src/components/reimbursement-detail.tsx，路由页面调用 requireBusinessPageUser。ReimbursementEditor 原签名不变，validate(complete) 调用已有固定校验；AttachmentItems 的 resource 联合增加固定 reimbursement-applications。
+src/lib/reimbursement-display.ts 新增 ReimbursementDetail HTTP 展示类型，明确固定申请、routeSnapshot、tasks、logs；不引入动态字段解释器或客户端服务端模块依赖。ReimbursementDetail({id:string,viewerId:string})（S4q增加服务端身份） 在 src/components/reimbursement-detail.tsx，路由页面调用 requireBusinessPageUser。ReimbursementEditor 原签名不变，validate(complete) 调用已有固定校验；AttachmentItems 的 resource 联合增加固定 reimbursement-applications。
 
 ## 外观与验证边界
 

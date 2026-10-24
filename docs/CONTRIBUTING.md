@@ -60,4 +60,6 @@ S4n报销列表遵守REIMBURSEMENT_LISTS.md：独立固定类型接口，仅本�
 
 S4o报销草稿UI见WEB_REIMBURSEMENT.md：固定输入显式摘取，费用排序/编辑保留本单行ID，新增行不带ID；来源仅从本人已批候选选择，跨页保留，PUT重新核验。票据选择已保存的费用行，号码随上传而非草稿保存；含票据行先显式删文件再删行。附件操作只更新version/文件列表，不覆盖未保存正文/无票标记；未知写结果停写核对，不自动重放。精确预览使用reimbursementAmount的整数分算法。共享Pager/TravelFailure在表单内作为查询控件时必须type=button，不隐式提交。
 
-S4p报销提交/只读详情见WEB_REIMBURSEMENT_SUBMISSION.md：客户端先schema规范化再调用固定提交issues函数，确认后先保存再用最新version提交。正文/票据状态与版本不一致时不展示；冻结来源摘要不扩权或取源全文，财务无票例外须突出。未知写结果停写核对，通知不能替代详情/文件鉴权；不在该阶段加入审批按钮或动态配置。
+S4p报销提交/只读详情见WEB_REIMBURSEMENT_SUBMISSION.md：客户端先schema规范化再调用固定提交issues函数，确认后先保存再用最新version提交。正文/票据状态与版本不一致时不展示；冻结来源摘要不扩权或取源全文，财务无票例外须突出。未知写结果停写核对，通知不能替代详情/文件鉴权；S4p不加入审批按钮；S4q已另行接入固定审批按钮，仍不加入动态配置。
+
+S4q列表与动作见WEB_REIMBURSEMENT_APPROVAL.md：URL严格校验，三种固定type切换保持列表模式并重置筛选；摘要null不当零，无票计数不推断缺附件。正文/票据一致后才开放操作，审批用实际taskId/version，冲突/未知写入保留意见停写回读；同人两节点仍分别确认。回归仅用approval_test，浏览器/单元数据库/HTTP串行；测试临时角色/状态变更必须finally恢复，不污染其他场景。

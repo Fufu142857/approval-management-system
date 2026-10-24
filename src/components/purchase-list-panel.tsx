@@ -54,6 +54,18 @@ export function PurchaseListNavigation({
           报销草稿
         </Link>
       )}
+      <Link
+        href={
+          mode === "applications" || mode === "drafts"
+            ? "/reimbursement/applications"
+            : mode === "pending"
+              ? "/reimbursement/tasks"
+              : "/reimbursement/tasks/handled"
+        }
+        prefetch={false}
+      >
+        {mode === "applications" || mode === "drafts" ? "报销申请" : "报销任务"}
+      </Link>
       {items.map(([key, href, label]) => (
         <Link
           key={key}
@@ -163,18 +175,22 @@ export function PurchaseListPanel({
               <select
                 id="list-type"
                 value="purchase"
-                onChange={() =>
-                  go(
-                    own
-                      ? "/travel/applications"
-                      : mode === "pending"
-                        ? "/travel/tasks"
-                        : "/travel/tasks/handled",
+                onChange={(event) => {
+                  const type = event.target.value;
+                  if (
+                    type !== "travel" &&
+                    type !== "purchase" &&
+                    type !== "reimbursement"
                   )
-                }
+                    return;
+                  go(
+                    `/${type}/${own ? "applications" : mode === "pending" ? "tasks" : "tasks/handled"}`,
+                  );
+                }}
               >
-                <option value="purchase">采购申请</option>
                 <option value="travel">差旅申请</option>
+                <option value="purchase">采购申请</option>
+                <option value="reimbursement">报销申请</option>
               </select>
             </Field>
             <Field label="申请状态" name="list-status">

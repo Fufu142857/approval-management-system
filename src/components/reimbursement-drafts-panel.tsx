@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ReimbursementDraftSummary } from "@/lib/reimbursement";
 import type { PageResult } from "@/lib/identity-display";
 import { travelTime } from "@/lib/travel-display";
+import { ReimbursementListNavigation } from "./reimbursement-list-panel";
 import { useResource } from "./use-resource";
 import { Pager } from "./ui";
 import { TravelFailure } from "./travel-common";
@@ -19,17 +20,7 @@ export function ReimbursementDraftsPanel() {
   );
   return (
     <div className="stack">
-      <nav className="management-tabs" aria-label="报销草稿导航">
-        <Link href="/travel/applications" prefetch={false}>
-          差旅申请
-        </Link>
-        <Link href="/purchase/applications" prefetch={false}>
-          采购申请
-        </Link>
-        <Link href="/reimbursement/drafts" aria-current="page" prefetch={false}>
-          报销草稿
-        </Link>
-      </nav>
+      <ReimbursementListNavigation mode="drafts" />
       <div className="page-heading">
         <div>
           <h2>报销草稿</h2>

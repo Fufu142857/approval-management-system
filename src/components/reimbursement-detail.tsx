@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
+import { ReimbursementDecisionPanel } from "./reimbursement-decision-panel";
 import {
   reimbursementCategoryNames,
   type ReimbursementDetail as Detail,
@@ -19,7 +21,16 @@ type FileList = {
   version: number;
   status: string;
 };
-export function ReimbursementDetail({ id }: { id: string }) {
+export function ReimbursementDetail({
+  id,
+  viewerId,
+}: {
+  id: string;
+  viewerId: string;
+}) {
+  const [opinion, setOpinion] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
   const detail = useResource<Detail>(`/reimbursement-applications/${id}`);
   const files = useResource<FileList>(
     `/reimbursement-applications/${id}/attachments`,
@@ -32,15 +43,19 @@ export function ReimbursementDetail({ id }: { id: string }) {
     return (
       <div className="stack">
         <TravelFailure message={detail.error || files.error!} retry={reload} />
-        <Link href="/reimbursement/drafts">返回报销草稿</Link>
+        <Link href="/reimbursement/applications">返回我的报销申请</Link>
+        <Link href="/reimbursement/tasks">返回我的报销待办</Link>
         <Link href="/notifications">返回通知中心</Link>
       </div>
     );
   if (!detail.data || !files.data)
     return (
-      <p className="empty-state" role="status">
-        正在加载报销申请…
-      </p>
+      <div className="stack">
+        {message && <Notice>{message}</Notice>}
+        <p className="empty-state" role="status">
+          正在加载报销申请…
+        </p>
+      </div>
     );
   const { application: app, workflow, tasks, logs } = detail.data;
   if (app.version !== files.data.version || app.status !== files.data.status)
@@ -58,16 +73,26 @@ export function ReimbursementDetail({ id }: { id: string }) {
           .name ?? "历史操作人");
   return (
     <div className="stack purchase-workspace purchase-readonly reimbursement-workspace">
+      {message && <Notice>{message}</Notice>}
       <div className="section-heading">
         <div className="actions">
-          <Link className="text-button" href="/reimbursement/drafts">
-            ← 返回报销草稿
+          <Link
+            className="text-button"
+            href={
+              app.applicantId === viewerId
+                ? "/reimbursement/applications"
+                : "/reimbursement/tasks"
+            }
+          >
+            {app.applicantId === viewerId
+              ? "← 返回我的报销申请"
+              : "← 返回我的报销待办"}
           </Link>
           <Link className="text-button" href="/notifications">
             通知中心
           </Link>
         </div>
-        <button className="button secondary" onClick={reload}>
+        <button className="button secondary" disabled={busy} onClick={reload}>
           刷新详情
         </button>
       </div>
@@ -274,6 +299,7 @@ export function ReimbursementDetail({ id }: { id: string }) {
                     appId={id}
                     resource="reimbursement-applications"
                     items={[file]}
+                    disabled={busy}
                   />
                 </div>
               ))}
@@ -281,6 +307,19 @@ export function ReimbursementDetail({ id }: { id: string }) {
           );
         })}
       </section>
+      <ReimbursementDecisionPanel
+        detail={detail.data}
+        viewerId={viewerId}
+        opinion={opinion}
+        onOpinion={setOpinion}
+        onBusy={setBusy}
+        onDone={(value) => {
+          setOpinion("");
+          setMessage(value);
+          reload();
+        }}
+        reload={reload}
+      />
       <section className="panel purchase-section">
         <h2>审批进度</h2>
         <p className="hint">部门负责人 → 财务审批人 · 提交时确定的实际人员</p>
