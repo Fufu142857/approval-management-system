@@ -455,6 +455,17 @@ export function ReimbursementEditor({
           </div>
         </Notice>
       )}
+      {draft?.resubmissionOf && (
+        <Notice>
+          这是关联原申请的重提草稿，票据未自动复制，请按费用重新核对并上传。{" "}
+          <Link
+            href={`/reimbursement/applications/${draft.resubmissionOf}`}
+            prefetch={false}
+          >
+            查看原申请
+          </Link>
+        </Notice>
+      )}
       <form
         method="post"
         noValidate

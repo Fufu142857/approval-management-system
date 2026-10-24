@@ -1,6 +1,6 @@
 # S4q 固定报销列表与审批操作页面
 
-本阶段使用既有 S4m/S4n 接口，无新增 HTTP 契约或数据库迁移，仍为015。提交与冻结正文/票据见 WEB_REIMBURSEMENT_SUBMISSION.md。报销复制重提留到 S4r，统计继续分步；到 S5 停止整个项目代码修改并交棒。
+本阶段使用既有 S4m/S4n 接口，无新增 HTTP 契约或数据库迁移，仍为015。提交与冻结正文/票据见 WEB_REIMBURSEMENT_SUBMISSION.md。S4r已另行接入报销复制重提（WEB_REIMBURSEMENT_RESUBMISSION.md），统计继续分步；到 S5 停止整个项目代码修改并交棒。
 
 ## 入口与查询
 

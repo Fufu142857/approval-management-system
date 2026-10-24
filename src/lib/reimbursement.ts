@@ -122,6 +122,7 @@ export type ReimbursementDraft = Omit<ReimbursementDraftInput, "items"> & {
   createdAt: string;
   updatedAt: string;
   submittedAt: null;
+  resubmissionOf: string | null;
   totalAmount: string | null;
   noReceiptCount: number;
   items: (Omit<ReimbursementDraftInput["items"][number], "id"> & {

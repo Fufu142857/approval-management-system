@@ -1,6 +1,6 @@
 # S4m 固定报销审批与撤回
 
-本阶段提供报销当前任务通过/驳回及本人撤回的后端接口。沿用 S4l 冻结的“部门负责人 → 财务审批人”，不重新解析角色或改写路径。无新增迁移，当时为 014；S4n 已补列表及 015 索引，S4q已接入列表和审批/撤回Web页面（WEB_REIMBURSEMENT_APPROVAL.md），复制重提及统计继续分步。
+本阶段提供报销当前任务通过/驳回及本人撤回的后端接口。沿用 S4l 冻结的“部门负责人 → 财务审批人”，不重新解析角色或改写路径。无新增迁移，当时为 014；S4n 已补列表及 015 索引，S4q已接入列表和审批/撤回Web页面（WEB_REIMBURSEMENT_APPROVAL.md），S4r已接入复制重提（WEB_REIMBURSEMENT_RESUBMISSION.md），统计继续分步。
 
 ## 接口与输入
 
@@ -29,4 +29,4 @@ ID 为 UUID；version 为最新正整数。opinion 去除首尾空白、最多 2
 
 `tests/reimbursement-actions.test.ts` 覆盖两级通过、首末节点驳回/撤回、输入与身份、版本/任务/跨业务隔离、并发、故障回滚、失效人员、等锁后授权、终态票据和真实已批来源不变。`scripts/smoke-identity.mjs` 经生产 HTTP 验证五种路径、通知及 Web 重启后的终态、快照和票据原字节。实际执行结果以 STATUS.md / DEVELOPMENT_LOG.md 为准。
 
-S4n 已补固定报销本人全状态申请、待办/已办列表后端，见 REIMBURSEMENT_LISTS.md；UI、重提与统计继续分步。无 UI 修改，本阶段不新增浏览器截图结论。S5 仍须停止全项目代码修改，由用户独立实现自定义模块。
+S4n 已补固定报销本人全状态申请、待办/已办列表后端，见 REIMBURSEMENT_LISTS.md；后续S4o–S4r已接入Web页面及复制重提，统计继续分步。S4m本阶段无UI修改，不新增浏览器截图结论。S5 仍须停止全项目代码修改，由用户独立实现自定义模块。

@@ -16,7 +16,7 @@ application_links 对应设计的“已批准采购/差旅 → 新报销”，�
 
 ## 并发与数据库
 
-013 新增 reimbursement_requests / reimbursement_items / application_links；applications.type 新增固定 reimbursement，旧迁移与差旅/采购来源保护不改，报销重提尚未开放。明细顺序唯一约束可延迟检查以允许重排；链接复合主键防重复，FK禁止悬空或误删来源。触发器限制报销正文/明细/链接只在草稿修改，禁止改绑行及报销类型/申请人；插入链接强制同本人、approved、travel/purchase。
+013 新增 reimbursement_requests / reimbursement_items / application_links；applications.type 新增固定 reimbursement，旧迁移与差旅/采购来源保护不改，S4r已通过追加016开放固定报销重提。明细顺序唯一约束可延迟检查以允许重排；链接复合主键防重复，FK禁止悬空或误删来源。触发器限制报销正文/明细/链接只在草稿修改，禁止改绑行及报销类型/申请人；插入链接强制同本人、approved、travel/purchase。
 
 服务先组织/身份/部门锁，再报销申请锁；需要来源时按UUID排序取共享锁。所有写入同事务，失败回滚主表、费用与链接。详情持报销共享锁跨所有查询，避免混合版本；列表计数与条目同SQL快照。PUT/DELETE 必须带最新version，后到并发写失败，客户端未来接入不能自动重放不确定请求。
 

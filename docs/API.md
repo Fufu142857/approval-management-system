@@ -566,11 +566,11 @@ GET /api/reimbursement-applications 返回本人所有状态报销申请；GET /
 
 任务摘要为{id,seqNo,name,status,activatedAt,finishedAt,application:申请摘要}。pending只收实际当前人员且前序已通过、申请仍pending的已激活任务；handled只收本人approved/rejected，取消任务不计已办。同人两步按任务各计一条；task.status与application.status独立，例如已通过后撤回仍保留原通过结果。
 
-匿名/过期/停用会话401，有效待确认身份或无效部门403；管理员/财务角色不扩大本人范围，角色改变不替换冻结任务人员。所有成功响应no-store；列表只读，不自动标已读。组织锁后重验身份，条目/总数/版本/金额/无票数/当前节点同一SQL快照；后续动作仍须重读并验证taskId/version。类型/服务见reimbursement-lists.ts，HTTP边界见reimbursement-list-handlers.ts，完整说明见[REIMBURSEMENT_LISTS.md](REIMBURSEMENT_LISTS.md)。新增015索引；S4o/S4p已补报销草稿/提交详情，S4q已接列表审批页面，重提和统计尚未实现。
+匿名/过期/停用会话401，有效待确认身份或无效部门403；管理员/财务角色不扩大本人范围，角色改变不替换冻结任务人员。所有成功响应no-store；列表只读，不自动标已读。组织锁后重验身份，条目/总数/版本/金额/无票数/当前节点同一SQL快照；后续动作仍须重读并验证taskId/version。类型/服务见reimbursement-lists.ts，HTTP边界见reimbursement-list-handlers.ts，完整说明见[REIMBURSEMENT_LISTS.md](REIMBURSEMENT_LISTS.md)。新增015索引；S4o/S4p已补报销草稿/提交详情，S4q已接列表审批页面，S4r已接固定报销复制重提，统计尚未实现。
 
 ## S4o 报销草稿Web接入
 
-本阶段未新增或改变HTTP契约。/reimbursement/new、/reimbursement/drafts、/reimbursement/drafts/:id接入S4j/S4k现有草稿、候选与票据接口；仅本人草稿可编辑，页面鉴权不替代API授权。表单PUT只带固定输入及稳定行ID，票据上传绑定已保存itemId、可选receiptNumber和最新version；文件操作不自动保存正文。细节与错误恢复见[WEB_REIMBURSEMENT.md](WEB_REIMBURSEMENT.md)。S4p/S4q已另行接入提交/提交后详情和报销列表动作UI，重提继续分步，后端已实现能力仍按上述S4l–S4n接口调用。
+本阶段未新增或改变HTTP契约。/reimbursement/new、/reimbursement/drafts、/reimbursement/drafts/:id接入S4j/S4k现有草稿、候选与票据接口；仅本人草稿可编辑，页面鉴权不替代API授权。表单PUT只带固定输入及稳定行ID，票据上传绑定已保存itemId、可选receiptNumber和最新version；文件操作不自动保存正文。细节与错误恢复见[WEB_REIMBURSEMENT.md](WEB_REIMBURSEMENT.md)。S4p/S4q已另行接入提交/提交后详情和报销列表动作UI，S4r另行接入固定报销复制重提；提交/审批/列表仍按上述S4l–S4n接口调用。
 
 ## S4p 报销提交与只读详情Web接入
 
@@ -579,3 +579,13 @@ GET /api/reimbursement-applications 返回本人所有状态报销申请；GET /
 ## S4q 报销列表与审批Web接入
 
 无新增HTTP契约或迁移。/reimbursement/applications使用本人全状态GET；/reimbursement/tasks及/handled使用固定state查询任务；详情通过已有decision/withdraw端点提交实际taskId、最新version与opinion。URL查询仅允许page/pageSize/type/status/keyword/from/to，重复/未知/非法项给重置入口。页面默认10条；金额/null与noReceiptCount原样展示，日期语义沿上述S4n契约。正文/票据version和status不一致或读取失败时无操作入口，前端角色判断不替代服务端授权。失败恢复、具体组件签名与验证见WEB_REIMBURSEMENT_APPROVAL.md。
+
+## S4r 固定报销复制重提
+
+GET /api/reimbursement-applications/:id/resubmission返回data={sourceId,successor}，successor为null或{id,appNo,status,version}。POST同路径只接受严格{version:number}（1–2147483647），新建201/已有后续200，返回data={sourceId,successor,created:boolean}。UUID、未知JSON字段/非整数/字符串版本、任何查询参数均严格拒绝；Cookie/Origin、身份和no-store沿既有接口。无额外参数或动态模板能力。
+
+仅有效业务身份的本人rejected/withdrawn报销可查询或复制。无权/其他类型/不存在404 NOT_FOUND，非终态409 NOT_RESUBMITTABLE，旧版本409 VERSION_CONFLICT；已有后续也先校验原版本。复制前重验关联源均为本人approved的travel/purchase，失败404 LINK_NOT_AVAILABLE；明细不完整409 SOURCE_INCOMPLETE（缺头沿既有DRAFT_INCOMPLETE）。身份失效/禁用401、待确认或部门无效403，通用错误约定不变。
+
+新草稿新编号/当前部门/version=1/submittedAt=null/resubmissionOf=原报销ID，复制标题、description、independentReason、remarks、费用顺序/分类/日期/用途/NUMERIC金额/noReceipt及原因，费用生成新ID；有效linkedApplicationIds复制但不授予源全文/附件权限。附件/号码/文件对象、审批实例/任务/日志/通知不复制，原记录及历史不变。后续保存/提交重新检查关联、完整费用、逐行票据或显式无票原因及当前部门/财务审批人。
+
+同一原申请只保留一个直接后续，并发/重复返回已有后续当前状态，不覆盖用户编辑。删除未提交后续可再次创建；后续已提交则保留链，从后续终态继续。GET只查关系不创建、不标已读。复制任何失败先GET核对，不自动重试POST；原版本冲突刷新原详情。新增只读resubmissionOf:string|null出现在报销草稿和提交后详情，普通草稿写入schema不接受它；列表摘要契约不变。UI与锁顺序见WEB_REIMBURSEMENT_RESUBMISSION.md，数据库新增016迁移。

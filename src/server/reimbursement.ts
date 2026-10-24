@@ -85,7 +85,7 @@ export async function readReimbursementDetail(
       > & { createdAt: Date; updatedAt: Date; submittedAt: Date | null }
     >(
       `SELECT ${summaryColumns},a.applicant_id AS "applicantId",a.department_id AS "departmentId",a.submitted_at AS "submittedAt",
-      r.description,r.independent_reason AS "independentReason",r.remarks
+      a.resubmission_of AS "resubmissionOf",r.description,r.independent_reason AS "independentReason",r.remarks
      FROM applications a JOIN reimbursement_requests r ON r.app_id=a.id WHERE a.id=$1`,
       [id],
     )

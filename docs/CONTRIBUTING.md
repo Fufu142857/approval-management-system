@@ -63,3 +63,5 @@ S4o报销草稿UI见WEB_REIMBURSEMENT.md：固定输入显式摘取，费用排�
 S4p报销提交/只读详情见WEB_REIMBURSEMENT_SUBMISSION.md：客户端先schema规范化再调用固定提交issues函数，确认后先保存再用最新version提交。正文/票据状态与版本不一致时不展示；冻结来源摘要不扩权或取源全文，财务无票例外须突出。未知写结果停写核对，通知不能替代详情/文件鉴权；S4p不加入审批按钮；S4q已另行接入固定审批按钮，仍不加入动态配置。
 
 S4q列表与动作见WEB_REIMBURSEMENT_APPROVAL.md：URL严格校验，三种固定type切换保持列表模式并重置筛选；摘要null不当零，无票计数不推断缺附件。正文/票据一致后才开放操作，审批用实际taskId/version，冲突/未知写入保留意见停写回读；同人两节点仍分别确认。回归仅用approval_test，浏览器/单元数据库/HTTP串行；测试临时角色/状态变更必须finally恢复，不污染其他场景。
+
+S4r固定报销复制见WEB_REIMBURSEMENT_RESUBMISSION.md：仅本人终态，独立API和严格version；原申请锁串行复制并复用唯一后续，不能覆盖编辑。新行ID/当前部门，票据与号码必须重新上传，显式无票标记不自动变化。首次复制按UUID排序重验已批来源，任何失败回滚，不静默取消来源；普通提交后读取仍使用冻结摘要。resubmissionOf只读不可注入，未知写入先GET核对，不自动重放。

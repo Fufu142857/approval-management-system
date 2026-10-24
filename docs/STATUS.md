@@ -4,13 +4,13 @@
 
 ## 当前检查点
 
-- 已验收阶段：S0、S1、S2a–S2d、S3a–S3j、S4a–S4q。本轮基线 `f1dbbb2`。
-- 当前检查点：S4q 固定报销列表与审批操作 Web 页面；阶段分支 `stage/s04q-reimbursement-approval-web`。准确提交用 `git log -1 --format='%h %s' -- docs/STATUS.md` 查询；未提交时以 git status 为准。
-- 本轮范围：本人全状态申请、待办/已办查询与类型切换，实际节点通过/驳回/本人撤回确认、冲突及未知响应停写回读；无新API/迁移，仍015。
-- 下一增量：S4r 固定报销复制重提（新草稿/不可变来源、费用新行ID、票据重传、来源资格重验）；统计继续分步。
-- 尚未实现：报销复制重提、统计、自定义流程、小程序、OCR。草稿页面见 WEB_REIMBURSEMENT.md，提交/冻结详情见 WEB_REIMBURSEMENT_SUBMISSION.md，列表/审批页面见 WEB_REIMBURSEMENT_APPROVAL.md，后端见 REIMBURSEMENT_LISTS.md / REIMBURSEMENT_ACTIONS.md；到 S5 仍停止整个项目代码修改并交棒。
+- 已验收阶段：S0、S1、S2a–S2d、S3a–S3j、S4a–S4r。本轮基线 `1fefa99`。
+- 当前检查点：S4r 固定报销复制重提；阶段分支 `stage/s04r-reimbursement-resubmission`。准确提交用 `git log -1 --format='%h %s' -- docs/STATUS.md` 查询；未提交时以 git status 为准。
+- 本轮范围：本人终态复制为独立草稿、不可变来源、并发复用、费用新行ID、逐项票据重传、已批采购/差旅关联重验，以及Web确认/失败核对；新增resubmission GET/POST和016迁移。
+- 下一增量：S4s 固定业务统计后端：按授权范围及时间/部门/类型查询数量和状态分布；分类型统计已批准金额，采购金额、差旅预算、报销金额不混加，统计Web另拆阶段。
+- 尚未实现：统计、自定义流程、小程序、OCR。复制重提见 WEB_REIMBURSEMENT_RESUBMISSION.md。草稿页面见 WEB_REIMBURSEMENT.md，提交/冻结详情见 WEB_REIMBURSEMENT_SUBMISSION.md，列表/审批页面见 WEB_REIMBURSEMENT_APPROVAL.md，后端见 REIMBURSEMENT_LISTS.md / REIMBURSEMENT_ACTIONS.md；到 S5 仍停止整个项目代码修改并交棒。
 
-既有S4l `5754896`、上传记录`feee59c`、S4i `4e4a896`、S4m `7d1f8b8`、S4n `f820e1f`、S4o `a866b87`、S4p `f1dbbb2` 均保留在独立远程历史。本阶段沿既有历史追加真实提交，不重写旧阶段。
+既有S4l `5754896`、上传记录`feee59c`、S4i `4e4a896`、S4m `7d1f8b8`、S4n `f820e1f`、S4o `a866b87`、S4p `f1dbbb2`、S4q `1fefa99` 均保留在独立远程历史。本阶段沿既有历史追加真实提交，不重写旧阶段。
 
 ## 接续顺序
 
@@ -21,11 +21,13 @@
 
 ## 验证与环境
 
-S4q完整单元/数据库/接口回归339/339（22文件）、完整Chrome73/73（新增9组）均通过；生产HTTP与Web进程重启回归通过，三类固定业务的状态/通知/冻结证据和票据原字节保持，不等同数据库重启或Docker验证。生产构建、lint、typecheck、format:check及git diff --check通过。首次类型检查发现详情路由漏传新增viewerId，已修正；随后全部验收通过，无需降低旧断言。
+S4r新增22项专项全部通过，完整单元/数据库/接口回归361/361（23文件）通过；Chrome专项4/4、最终完整Chrome77/77通过；生产HTTP与Web进程重启回归通过，新旧来源链/正文/执行记录/票据原字节保持；不等同数据库进程重启或Docker验收。生产构建、lint、typecheck、format:check及git diff --check通过。HTTP首轮新增变量重名在解析阶段退出，修正并通过语法检查后重跑成功；专项初轮测试夹具残留采购quotes字段、来源旅行字段名和采购必填字段不全，已修正测试夹具后通过，不降低业务校验或旧断言。
 
-本轮复核外层设计第7页公共框架和第10页列表/待办说明，查看1365×900桌面申请/待办/已办/确认/冲突与同人双节点截图，以及390×844手机列表/驳回确认；无页面水平溢出或控件重叠，宽表在容器内滚动。没有独立报销列表或审批确认专图，不宣称逐像素复刻。截图仅在忽略的tmp/screenshots/reimbursement-approval-*.png，原PDF及渲染不入Git。未覆盖Safari/Firefox、真机、公开HTTPS或Docker，响应式Web不是小程序。
+开发库approval已非破坏性追加016迁移：迁移前后20张业务表的行数和全行内容摘要完全相同，重复迁移结果不变；旧迁移校验和保持。测试库使用同一迁移链，不重置或seed开发库。
 
-列表按本人创建/待办激活/已办完成时间筛选，URL保存条件；金额null不当零，无票数按显式标记。实际节点与最新version来自正文/票据一致的详情，申请人只可撤回；冲突/404/网络/5xx停写保留意见，手动回读核对后才再操作。成功清空意见，同人两步需分别确认；整页离开/失效会话可能丢失本地意见。冻结来源/票据继续只读，不扩展源单权限，无新API/迁移，仍015。
+复核外层设计第7页公共框架和第10页功能说明；已查看1365×900桌面复制确认/未知响应停写提示，以及390×844手机重提草稿/提交后详情；无页面水平溢出或控件重叠，费用宽表在容器内滚动。没有独立重提原型，不宣称逐像素复刻。截图仅在忽略的tmp/screenshots/reimbursement-resubmission-*.png，原PDF及渲染不入Git。未覆盖Safari/Firefox、真机、公开HTTPS或Docker，响应式Web不是小程序。
+
+复制只限本人rejected/withdrawn，严格version且同源串行只生成一个直接后续；原正文/版本/时间/历史/票据不变。新草稿使用当前部门、新编号与费用行ID，保留精确金额、显式无票原因和仍合格的本人已批来源；不复制文件/号码/审批记录，不静默改成无票。来源资格失效或任一写入失败整体回滚，旧终态仍读冻结摘要；重提保存/提交再走现有资格、票据及当前实际人员校验。响应丢失先GET核对，不自动重放POST；新旧单各自鉴权，来源关联不扩权。接口、锁顺序及新类型见API.md、HUMAN_HANDOFF.md。
 
 依赖决策：用户已明确不升级、忽略新版；本阶段保持Next.js16.4.0及全部依赖/锁文件不变。首次构建完成编译/类型/路由后被既有升级提醒中断，重跑成功；不表示告警修复，不再次请求升级。数据库/Chrome/HTTP全部串行使用独立approval_test和隔离附件目录，不重置/seed开发库、不改.env/私有上传。
 

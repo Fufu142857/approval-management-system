@@ -2338,6 +2338,132 @@ try {
       notices: terminalNotices,
     });
   }
+  // S4r: terminal copy creates an independent draft, never duplicates receipts.
+  const reimbursementSource = reimbursementTerminals.find(
+    (entry) => entry.terminal.application.status === "withdrawn",
+  );
+  const reimbursementRetryPath = `${reimbursementSource.path}/resubmission`;
+  const reimbursementCopy = await call(
+    reimbursementRetryPath,
+    "POST",
+    { version: reimbursementSource.terminal.application.version },
+    token,
+  );
+  assert.equal(reimbursementCopy.response.status, 201);
+  assert.equal(
+    (
+      await call(
+        reimbursementRetryPath,
+        "POST",
+        { version: reimbursementSource.terminal.application.version },
+        token,
+      )
+    ).response.status,
+    200,
+  );
+  const reimbursementChild = reimbursementCopy.body.data.successor;
+  const reimbursementChildPath = `reimbursement-drafts/${reimbursementChild.id}`;
+  const copiedExpense = (
+    await call(reimbursementChildPath, "GET", undefined, token)
+  ).body.data;
+  assert.equal(
+    copiedExpense.resubmissionOf,
+    reimbursementSource.terminal.application.id,
+  );
+  assert.equal(copiedExpense.version, 1);
+  assert.equal(copiedExpense.totalAmount, "1.53");
+  assert.deepEqual(
+    copiedExpense.linkedApplicationIds,
+    reimbursementSource.terminal.application.linkedApplicationIds,
+  );
+  assert(
+    copiedExpense.items.every(
+      (item) =>
+        !reimbursementSource.terminal.application.items.some(
+          (old) => old.id === item.id,
+        ),
+    ),
+  );
+  assert.deepEqual(
+    (
+      await call(
+        `${reimbursementChildPath}/attachments`,
+        "GET",
+        undefined,
+        token,
+      )
+    ).body.data.items,
+    [],
+  );
+  assert.equal(
+    (
+      await call(
+        `${reimbursementChildPath}/submit`,
+        "POST",
+        { version: 1 },
+        token,
+      )
+    ).response.status,
+    400,
+  );
+  const editedRetryExpense = await call(
+    reimbursementChildPath,
+    "PUT",
+    {
+      ...expenseFields,
+      title: "报销重提HTTP",
+      items: copiedExpense.items,
+      version: 1,
+    },
+    token,
+  );
+  assert.equal(editedRetryExpense.response.status, 200);
+  const retryReceipt = new FormData();
+  retryReceipt.set("version", "2");
+  retryReceipt.set("receiptNumber", "RETRY-RECEIPT");
+  retryReceipt.set(
+    "file",
+    new File([png], "重提票据.png", { type: "image/png" }),
+  );
+  const retryUpload = await fetch(
+    `${origin}/api/${reimbursementChildPath}/items/${copiedExpense.items[0].id}/attachments`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, Origin: origin },
+      body: retryReceipt,
+    },
+  );
+  assert.equal(retryUpload.status, 201);
+  const reimbursementRetryFile = (await retryUpload.json()).data.attachment;
+  const expenseRetrySubmit = await call(
+    `${reimbursementChildPath}/submit`,
+    "POST",
+    { version: 3 },
+    token,
+  );
+  assert.equal(expenseRetrySubmit.response.status, 200);
+  const reimbursementRetryDetail = expenseRetrySubmit.body.data;
+  assert.equal(
+    reimbursementRetryDetail.application.resubmissionOf,
+    reimbursementSource.terminal.application.id,
+  );
+  assert.notEqual(
+    reimbursementRetryDetail.workflow.id,
+    reimbursementSource.terminal.workflow.id,
+  );
+  assert.equal(reimbursementRetryDetail.logs.length, 1);
+  assert.deepEqual(
+    (await call(reimbursementSource.path, "GET", undefined, token)).body.data,
+    reimbursementSource.terminal,
+  );
+  assert.equal(
+    (await call(reimbursementRetryPath, "GET", undefined, head.token)).response
+      .status,
+    404,
+  );
+  const reimbursementRelationBefore = (
+    await call(reimbursementRetryPath, "GET", undefined, token)
+  ).body.data;
   // S4n: owned/all-state and actual pending/handled lists, then compare after restart.
   const listDraft = await call(
     "reimbursement-drafts",
@@ -2527,6 +2653,27 @@ try {
   await server.closed;
   server = startServer();
   await ready();
+  assert.deepEqual(
+    (await call(reimbursementRetryPath, "GET", undefined, token)).body.data,
+    reimbursementRelationBefore,
+  );
+  assert.deepEqual(
+    (
+      await call(
+        `reimbursement-applications/${reimbursementChild.id}`,
+        "GET",
+        undefined,
+        token,
+      )
+    ).body.data,
+    reimbursementRetryDetail,
+  );
+  const retryBytes = await fetch(
+    `${origin}/api/reimbursement-applications/${reimbursementChild.id}/attachments/${reimbursementRetryFile.id}/content`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  assert.equal(retryBytes.status, 200);
+  assert.deepEqual(Buffer.from(await retryBytes.arrayBuffer()), png);
   for (const saved of reimbursementListSnapshots)
     assert.deepEqual(
       (
@@ -2775,7 +2922,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; reimbursement submission/receipt completeness/finance snapshots/frozen source summaries/submitted authorization/notice and file persistence; reimbursement two-step approval/rejection/withdrawal at both nodes, terminal history authorization/frozen evidence/notifications and receipt bytes after restart; reimbursement owned/pending/handled lists, filters/pagination/exact totals/no-receipt summaries, permissions and restart persistence; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; reimbursement submission/receipt completeness/finance snapshots/frozen source summaries/submitted authorization/notice and file persistence; reimbursement two-step approval/rejection/withdrawal at both nodes, terminal history authorization/frozen evidence/notifications and receipt bytes after restart; reimbursement owned/pending/handled lists, filters/pagination/exact totals/no-receipt summaries, permissions and restart persistence; reimbursement linked resubmission/new item IDs/receipt re-upload/independent workflow/retry reuse and restart bytes; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { ReimbursementResubmissionPanel } from "./reimbursement-resubmission-panel";
 import { ReimbursementDecisionPanel } from "./reimbursement-decision-panel";
 import {
   reimbursementCategoryNames,
@@ -96,6 +97,17 @@ export function ReimbursementDetail({
           刷新详情
         </button>
       </div>
+      {app.resubmissionOf && app.applicantId === viewerId && (
+        <Notice>
+          本申请由原申请复制重提。{" "}
+          <Link
+            href={`/reimbursement/applications/${app.resubmissionOf}`}
+            prefetch={false}
+          >
+            查看原申请
+          </Link>
+        </Notice>
+      )}
       <section className="panel purchase-section">
         <div className="section-heading">
           <h2 className="travel-long-text">{app.title}</h2>
@@ -307,6 +319,16 @@ export function ReimbursementDetail({
           );
         })}
       </section>
+      {app.applicantId === viewerId &&
+        ["rejected", "withdrawn"].includes(app.status) && (
+          <ReimbursementResubmissionPanel
+            id={app.id}
+            version={app.version}
+            appNo={app.appNo}
+            title={app.title}
+            onBusy={setBusy}
+          />
+        )}
       <ReimbursementDecisionPanel
         detail={detail.data}
         viewerId={viewerId}
