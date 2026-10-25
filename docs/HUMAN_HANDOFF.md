@@ -1,6 +1,6 @@
 # 人工模块交接边界
 
-**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，S3f 已接入差旅草稿/附件/提交与只读详情页面；S3g 已完成固定差旅全状态及待办/已办列表后端；S3h 已接入列表与审批/撤回页面；S3i 已接入通知页面与前台轮询；S3j 已完成差旅复制重提；S4a 已完成固定采购数据模型与草稿后端；S4b 已实现采购报价附件；S4c 已完成固定采购提交与提交后详情，S4d 已完成固定采购审批动作，S4e 已完成采购申请与任务列表后端，S4f 已接入采购草稿与报价附件页面，S4g 已接入采购提交与提交后只读详情，S4h 已接入采购列表与审批操作页面，S4i 已接入采购复制重提，S4j 已完成固定报销草稿后端，S4k 已完成报销票据附件后端，S4l 已实现报销提交与提交后详情，S4m 已完成报销审批动作，S4n 已完成报销申请与任务列表后端，S4o 已接入报销草稿与票据 Web 页面，S4p 已接入报销提交、只读详情与通知跳转，S4q 已接入报销列表与审批操作页面，S4r 已接入固定报销复制重提，下一步 S4s 固定业务统计后端。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
+**当前状态：尚未到交接点。** 当前完成 S0/S1 与 S2 身份管理（数据库、接口、Web 页面及浏览器验收）；S3a–S3e 固定差旅审批、本人通知与受控附件后端也已完成，S3f 已接入差旅草稿/附件/提交与只读详情页面；S3g 已完成固定差旅全状态及待办/已办列表后端；S3h 已接入列表与审批/撤回页面；S3i 已接入通知页面与前台轮询；S3j 已完成差旅复制重提；S4a 已完成固定采购数据模型与草稿后端；S4b 已实现采购报价附件；S4c 已完成固定采购提交与提交后详情，S4d 已完成固定采购审批动作，S4e 已完成采购申请与任务列表后端，S4f 已接入采购草稿与报价附件页面，S4g 已接入采购提交与提交后只读详情，S4h 已接入采购列表与审批操作页面，S4i 已接入采购复制重提，S4j 已完成固定报销草稿后端，S4k 已完成报销票据附件后端，S4l 已实现报销提交与提交后详情，S4m 已完成报销审批动作，S4n 已完成报销申请与任务列表后端，S4o 已接入报销草稿与票据 Web 页面，S4p 已接入报销提交、只读详情与通知跳转，S4q 已接入报销列表与审批操作页面，S4r 已接入固定报销复制重提，S4s 已实现固定业务统计后端，下一步 S4t 固定业务统计 Web 页面。后续在 S4 完成后更新为可直接接棒的完整真实接口清单。最新进度见 STATUS.md。本文不是自定义模块实现方案，不含代码或实现伪代码。
 
 ## 独立完成范围
 
@@ -100,7 +100,7 @@ S4d 已有 POST /api/purchase-applications/:id/tasks/:taskId/decision 与 POST /
 
 S4e 新增 GET /api/purchase-applications 与 GET /api/purchase-tasks。输入/摘要类型在 src/lib/purchase-lists.ts；src/server/purchase-lists.ts 导出 listPurchaseApplications(token: string | undefined, input: PurchaseApplicationListInput) 和 listPurchaseTasks(token, input: PurchaseTaskListInput)，自行开事务，调用前用 purchaseApplicationListSchema/purchaseTaskListSchema 校验。真实字段/日期/状态筛选与权限见 API.md，不能按列表摘要直接信任后续审批权限。
 
-011 只添加采购按申请人/创建时间排序的部分索引，开发库已应用且数据摘要保持；任务索引继续复用 007。列表总数/分页/状态/金额/版本单 SQL 快照，不取申请行锁；详情/动作仍分别持共享/排他行锁。已办是本人 approved/rejected 任务，取消不计，同人两节点保留两项；金额为精确字符串/null。S4f/S4g 已接入采购草稿、报价附件、提交与只读详情 Web 页面，S4h 已补采购列表/动作页面，S4i 已补复制重提，统计尚未实现。S5 人工边界继续有效。
+011 只添加采购按申请人/创建时间排序的部分索引，开发库已应用且数据摘要保持；任务索引继续复用 007。列表总数/分页/状态/金额/版本单 SQL 快照，不取申请行锁；详情/动作仍分别持共享/排他行锁。已办是本人 approved/rejected 任务，取消不计，同人两节点保留两项；金额为精确字符串/null。S4f/S4g 已接入采购草稿、报价附件、提交与只读详情 Web 页面，S4h 已补采购列表/动作页面，S4i 已补复制重提，统计后端S4s已实现，Web尚未接入。S5 人工边界继续有效。
 
 S4f 页面契约见 WEB_PURCHASE.md。purchase-editor.tsx 明确列出固定采购字段，purchase-display.ts 只处理固定采购输入/金额，未生成动态字段或模板解析。新增页面 /purchase/new、/purchase/drafts、/purchase/drafts/:id，复用已有 API，无新迁移。AttachmentItems 的可选 resource 只允许 travel-applications / purchase-drafts / purchase-applications，默认保持原差旅行为；采购上传必须已有 quoteId，附件写入只更新 version，不自动保存文字。冲突/不确定写入停写保留输入，人工核对再重新加载，不自动重放。S5 停止全项目代码修改的边界保持不变。
 
@@ -142,7 +142,7 @@ S4o真实Web入口：/reimbursement/new、/reimbursement/drafts、/reimbursement
 
 src/lib/reimbursement-display.ts导出reimbursementCategoryNames、reimbursementFields(draft?:ReimbursementDraft):ReimbursementDraftInput、reimbursementAmount(items:ReimbursementDraftInput["items"]):{total:string|null,overflow:boolean}。字段提取不带服务端身份/合计/关联摘要；金额逐行规范化再BigInt求和，空/缺项/非法输入显示未知。AttachmentItems新增固定resource="reimbursement-drafts"，预览/下载仍独立鉴权。组件锁写并在冲突/不确定响应时保留输入停写；两个GET版本匹配后才编辑，人工确认才丢弃本地修改。真实操作与限制见WEB_REIMBURSEMENT.md。
 
-S4o不增加API或迁移，仍015；S4p已接固定报销提交与只读详情/票据和通知跳转，按S4l合同先保存后提交、展示冻结来源与无票例外。S4q已补报销全状态/任务列表与审批操作页面，S4r已接固定报销复制重提，下一增量S4s固定业务统计后端；统计继续分步，S5全项目停写边界不变。
+S4o不增加API或迁移，仍015；S4p已接固定报销提交与只读详情/票据和通知跳转，按S4l合同先保存后提交、展示冻结来源与无票例外。S4q已补报销全状态/任务列表与审批操作页面，S4r已接固定报销复制重提，S4s已补固定业务统计后端，下一增量S4t接入统计Web，S5全项目停写边界不变。
 
 S4p真实Web契约见WEB_REIMBURSEMENT_SUBMISSION.md。新增/reimbursement/applications/:id，页面校验业务身份/UUID；src/components/reimbursement-detail.tsx导出ReimbursementDetail({id:string,viewerId:string})（S4q增加服务端身份），HTTP展示类型ReimbursementDetail在src/lib/reimbursement-display.ts，明确固定routeSnapshot/tasks/logs。正文与票据version/status匹配才展示；冻结来源摘要不查询或链接源全文，顶部/逐行显示无票原因。AttachmentItems的固定resource增加reimbursement-applications，预览下载保持独立鉴权。
 
@@ -158,4 +158,10 @@ S4r真实契约见API.md与WEB_REIMBURSEMENT_RESUBMISSION.md。src/server/reimbu
 
 016仅扩大preserve_travel_resubmission历史命名函数的固定类型白名单至报销，沿用008唯一后续/自引用/外键和012不可变保护。新环境迁移001–016；既有库追加，不重置/seed。锁顺序组织/身份/部门→原报销→已有后续或UUID排序来源→新记录，所有复制表写入失败回滚，不改原版本/时间/执行与文件。已有后续只返回当前标识，不覆盖内容；删除未提交后续可重建，已提交沿后续延长链。
 
-ReimbursementResubmissionPanel({id:string,version:number,appNo:string,title:string,onBusy:(busy:boolean)=>void})由本人终态详情挂载，GET关系、确认POST，失败暂停并GET核对；版本冲突重新读取整份详情。复制期间协调父组件禁用刷新/票据，新草稿/详情向本人提供原申请链接。新旧正文权限独立，来源关系不授权历史审批人。统计尚未实现；到S5仍停止全项目代码修改。
+ReimbursementResubmissionPanel({id:string,version:number,appNo:string,title:string,onBusy:(busy:boolean)=>void})由本人终态详情挂载，GET关系、确认POST，失败暂停并GET核对；版本冲突重新读取整份详情。复制期间协调父组件禁用刷新/票据，新草稿/详情向本人提供原申请链接。新旧正文权限独立，来源关系不授权历史审批人。S4s已补统计后端、Web待S4t；到S5仍停止全项目代码修改。
+
+S4s真实契约见STATISTICS.md与API.md。src/server/statistics.ts导出getFixedBusinessStatistics(token:string|undefined,input:StatisticsInput):Promise<FixedBusinessStatistics>，服务校验schema并自行事务/鉴权；src/server/statistics-handlers.ts导出statisticsHandler(request:Request)，/api/statistics/route.ts只映射GET。statisticsSchema/statisticsTypes/statisticsStatuses及StatisticsInput/StatisticsType/StatisticsCounts/FixedBusinessStatistics见src/lib/statistics.ts；不需要或允许客户端提供申请人/实际部门授权。
+
+scope默认personal，仅本人已提交申请；department只给当前有效department_head所属部门汇总，其他角色不隐含公司/财务权限，显式他部门403。pendingTasks永远是调用者的实际当前待办，独立于本人申请，但接受同样的提交日/部门/类型筛选。时间统一submitted_at上海日历日，草稿排除、当前状态分布；金额仅approved并按采购总额/差旅预算/报销总额分开，string|null及缺失计数不可变成浮点/零。汇总不授予正文/文件访问或审批权，页面不要根据统计直接构造审批动作。
+
+017仅新增两个提交时间部分索引，数据读取同一SQL快照，组织锁后重验会话/当前角色/部门；不改通知或记录，不取业务行锁。现有申请部门保持提交时归属，新任负责人可看汇总但未分配历史正文仍404。统计Web/图表尚未实现，下一阶段S4t按设计接入；到S5停止整个项目代码修改，人工模块边界不变。

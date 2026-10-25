@@ -252,3 +252,11 @@ route_snapshot新增固定报销内容：必要linkedApplications摘要、独立
 复制事务先组织/身份/部门锁，再原报销FOR UPDATE；若有后续取SHARE后直接返回。首次复制对关联采购/差旅按UUID排序持SHARE并重验资格，接着创建新主表/报销头/新费用/链接，失败全部回滚。原版本/时间/执行记录和私有对象不动。新草稿采用当前部门，无票原因保留但票据记录/号码/原文件不复制；提交仍走完整文件/来源校验。GET关系仅本人终态，持原单/后续SHARE，关系不会授予跨单权限。
 
 新环境迁移001–016，已有库只追加迁移，不重置/seed。开发库迁移前后内容摘要及重复应用结果以STATUS.md/开发日志为准；测试仅使用approval_test及隔离文件目录，数据库与附件备份配套要求不变。
+
+## S4s 固定业务统计索引与读取
+
+017_fixed_statistics_indexes.sql新增applications_fixed_department_submitted_idx和applications_fixed_applicant_submitted_idx，分别按department_id/submitted_at/type/status与applicant_id/submitted_at/type/status索引，仅含submitted_at非空且固定三类型。无新业务表或授权表，不改旧迁移、业务行或文件；新环境执行001–017。
+
+统计事务先组织72002共享锁及会话/有效部门检查，部门范围按锁后当前department_head/departmentId决定。所有业务数量/当前状态/NUMERIC金额和本人实际待办共用单SQL快照，不取申请行锁；部门按applications保存的部门而非用户现部门。金额按单先聚合，避免明细/来源/任务连接倍增，多单总额不收窄回14位。未知金额显式返回null/缺失单数。
+
+017开发库追加、20张业务表行数/全行摘要前后比较及重复迁移结果见STATUS.md；不重置/seed。测试与HTTP串行使用approval_test及隔离目录，数据库/附件仍需配对备份。本阶段不实现自定义流程或额外财务/公司统计授权。

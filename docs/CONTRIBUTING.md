@@ -65,3 +65,5 @@ S4p报销提交/只读详情见WEB_REIMBURSEMENT_SUBMISSION.md：客户端先sch
 S4q列表与动作见WEB_REIMBURSEMENT_APPROVAL.md：URL严格校验，三种固定type切换保持列表模式并重置筛选；摘要null不当零，无票计数不推断缺附件。正文/票据一致后才开放操作，审批用实际taskId/version，冲突/未知写入保留意见停写回读；同人两节点仍分别确认。回归仅用approval_test，浏览器/单元数据库/HTTP串行；测试临时角色/状态变更必须finally恢复，不污染其他场景。
 
 S4r固定报销复制见WEB_REIMBURSEMENT_RESUBMISSION.md：仅本人终态，独立API和严格version；原申请锁串行复制并复用唯一后续，不能覆盖编辑。新行ID/当前部门，票据与号码必须重新上传，显式无票标记不自动变化。首次复制按UUID排序重验已批来源，任何失败回滚，不静默取消来源；普通提交后读取仍使用冻结摘要。resubmissionOf只读不可注入，未知写入先GET核对，不自动重放。
+
+S4s统计遵守STATISTICS.md：仅固定三类型，部门范围按当前department_head和确认部门确定；其他角色无隐含全公司授权，汇总不授权正文。申请/实际待办/精确金额同一SQL快照，按提交日过滤且排除草稿，状态为当前状态；通过金额按类型分开，未知值保留null和缺失计数，不能把多单总额收窄回单据精度或使用JS浮点合计。待办始终仅本人当前实际任务，查询不标已读。S4t页面另行实现。

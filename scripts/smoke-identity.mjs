@@ -2646,6 +2646,153 @@ try {
         400,
       );
   }
+  // S4s: compare aggregate counts with independent fixed-business list APIs.
+  const statisticsSnapshots = [];
+  async function captureStatistics(path, actorToken, actorCookie) {
+    const response = await call(
+      path,
+      "GET",
+      undefined,
+      actorToken,
+      actorCookie,
+    );
+    assert.equal(response.response.status, 200);
+    statisticsSnapshots.push({
+      path,
+      actorToken,
+      actorCookie,
+      data: response.body.data,
+    });
+    return response.body.data;
+  }
+  const personalStatistics = await captureStatistics("statistics", token);
+  assert.equal(personalStatistics.filters.timeBasis, "submittedAt");
+  assert.equal(personalStatistics.filters.timezone, "Asia/Shanghai");
+  assert.equal(
+    Object.hasOwn(personalStatistics.applications, "approvedAmount"),
+    false,
+  );
+  for (const type of ["travel", "purchase", "reimbursement"]) {
+    const listed = (
+      await call(`${type}-applications?pageSize=100`, "GET", undefined, token)
+    ).body.data;
+    assert(listed.total <= 100, "statistics oracle requires all rows");
+    const submittedRows = listed.items.filter(
+      (item) => item.status !== "draft",
+    );
+    const row = personalStatistics.applications.byType.find(
+      (item) => item.type === type,
+    );
+    assert.equal(row.total, submittedRows.length);
+    for (const status of ["pending", "approved", "rejected", "withdrawn"])
+      assert.equal(
+        row.statuses[status],
+        submittedRows.filter((item) => item.status === status).length,
+      );
+    let cents = 0n;
+    for (const application of submittedRows.filter(
+      (item) => item.status === "approved",
+    )) {
+      const detail = (
+        await call(
+          `${type}-applications/${application.id}`,
+          "GET",
+          undefined,
+          token,
+        )
+      ).body.data.application;
+      const amount = type === "travel" ? detail.budget : detail.totalAmount;
+      assert.match(amount, /^\d+\.\d{2}$/);
+      cents += BigInt(amount.replace(".", ""));
+    }
+    assert.equal(
+      row.approvedAmount,
+      `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`,
+    );
+    assert.equal(row.approvedAmountMissingCount, 0);
+    const filteredStatistics = await captureStatistics(
+      `statistics?type=${type}`,
+      token,
+    );
+    assert.deepEqual(filteredStatistics.applications.byType, [row]);
+  }
+  const departmentStatistics = await captureStatistics(
+    "statistics?scope=department",
+    head.token,
+  );
+  assert.equal(departmentStatistics.filters.departmentId, departmentId);
+  assert(
+    departmentStatistics.applications.total >=
+      personalStatistics.applications.total,
+  );
+  for (const actorToken of [head.token, finance.token, companyHead.token]) {
+    const pendingStatistics = await captureStatistics("statistics", actorToken);
+    let pendingTotal = 0;
+    for (const type of ["travel", "purchase", "reimbursement"]) {
+      const tasks = (await call(`${type}-tasks`, "GET", undefined, actorToken))
+        .body.data;
+      assert.equal(
+        pendingStatistics.pendingTasks.byType.find((row) => row.type === type)
+          .count,
+        tasks.total,
+      );
+      pendingTotal += tasks.total;
+    }
+    assert.equal(pendingStatistics.pendingTasks.total, pendingTotal);
+  }
+  assert.equal(
+    (await captureStatistics("statistics", undefined, cookie)).applications
+      .total,
+    0,
+  );
+  for (const actorToken of [token, finance.token, companyHead.token])
+    assert.equal(
+      (await call("statistics?scope=department", "GET", undefined, actorToken))
+        .response.status,
+      403,
+    );
+  assert.equal(
+    (
+      await call(
+        "statistics?scope=department",
+        "GET",
+        undefined,
+        undefined,
+        cookie,
+      )
+    ).response.status,
+    403,
+  );
+  assert.equal(
+    (
+      await call(
+        `statistics?scope=department&departmentId=${financeDepartment.id}`,
+        "GET",
+        undefined,
+        head.token,
+      )
+    ).response.status,
+    403,
+  );
+  assert.equal((await call("statistics")).response.status, 401);
+  for (const query of [
+    "scope=all",
+    "type=custom",
+    "type=travel&type=purchase",
+    "from=2027-02-29",
+    "applicantId=" + id,
+  ])
+    assert.equal(
+      (await call("statistics?" + query, "GET", undefined, token)).response
+        .status,
+      400,
+    );
+  const emptyStatistics = await captureStatistics(
+    "statistics?from=0001-01-01&to=0001-01-01",
+    token,
+  );
+  assert.equal(emptyStatistics.applications.total, 0);
+  assert.equal(emptyStatistics.pendingTasks.total, 0);
   const purchaseRelationBefore = (
     await call(purchaseRetryPath, "GET", undefined, token)
   ).body.data;
@@ -2653,6 +2800,19 @@ try {
   await server.closed;
   server = startServer();
   await ready();
+  for (const saved of statisticsSnapshots)
+    assert.deepEqual(
+      (
+        await call(
+          saved.path,
+          "GET",
+          undefined,
+          saved.actorToken,
+          saved.actorCookie,
+        )
+      ).body.data,
+      saved.data,
+    );
   assert.deepEqual(
     (await call(reimbursementRetryPath, "GET", undefined, token)).body.data,
     reimbursementRelationBefore,
@@ -2922,7 +3082,7 @@ try {
     200,
   );
   console.log(
-    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; reimbursement submission/receipt completeness/finance snapshots/frozen source summaries/submitted authorization/notice and file persistence; reimbursement two-step approval/rejection/withdrawal at both nodes, terminal history authorization/frozen evidence/notifications and receipt bytes after restart; reimbursement owned/pending/handled lists, filters/pagination/exact totals/no-receipt summaries, permissions and restart persistence; reimbursement linked resubmission/new item IDs/receipt re-upload/independent workflow/retry reuse and restart bytes; logout.",
+    "Production HTTP smoke passed: identity, travel drafts/submission/actions and owned/pending/handled lists, history authorization, notifications and read timestamps, multipart attachments/upload/delete/version conflicts/controlled preview/download/freeze; fixed purchase draft CRUD/row identities/exact totals, quote attachments/ownership/deletion protection and restart bytes; purchase submission/company-head snapshots/authorized submitted detail and evidence/freeze/restart persistence; purchase approval/rejection/withdrawal at both nodes, history permissions and terminal notices/evidence after restart; purchase owned/pending/handled lists, filters/pagination/exact totals/type isolation and restart persistence; travel and purchase linked resubmission drafts/new execution, purchase online evidence re-upload and retry reuse, terminal records, metadata and attachment bytes survive production restart; reimbursement drafts/row identities/exact totals/owned approved links/independent drafts, JPEG/PNG/PDF receipts/item ownership/receipt numbers/deletion protection/original bytes after restart and deletion; reimbursement submission/receipt completeness/finance snapshots/frozen source summaries/submitted authorization/notice and file persistence; reimbursement two-step approval/rejection/withdrawal at both nodes, terminal history authorization/frozen evidence/notifications and receipt bytes after restart; reimbursement owned/pending/handled lists, filters/pagination/exact totals/no-receipt summaries, permissions and restart persistence; reimbursement linked resubmission/new item IDs/receipt re-upload/independent workflow/retry reuse and restart bytes; fixed statistics/personal and department authorization/submitted dates/separate exact approved amounts/actual pending tasks and restart persistence; logout.",
   );
 } finally {
   server.child.kill("SIGTERM");

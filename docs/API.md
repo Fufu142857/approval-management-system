@@ -589,3 +589,15 @@ GET /api/reimbursement-applications/:id/resubmission返回data={sourceId,success
 新草稿新编号/当前部门/version=1/submittedAt=null/resubmissionOf=原报销ID，复制标题、description、independentReason、remarks、费用顺序/分类/日期/用途/NUMERIC金额/noReceipt及原因，费用生成新ID；有效linkedApplicationIds复制但不授予源全文/附件权限。附件/号码/文件对象、审批实例/任务/日志/通知不复制，原记录及历史不变。后续保存/提交重新检查关联、完整费用、逐行票据或显式无票原因及当前部门/财务审批人。
 
 同一原申请只保留一个直接后续，并发/重复返回已有后续当前状态，不覆盖用户编辑。删除未提交后续可再次创建；后续已提交则保留链，从后续终态继续。GET只查关系不创建、不标已读。复制任何失败先GET核对，不自动重试POST；原版本冲突刷新原详情。新增只读resubmissionOf:string|null出现在报销草稿和提交后详情，普通草稿写入schema不接受它；列表摘要契约不变。UI与锁顺序见WEB_REIMBURSEMENT_RESUBMISSION.md，数据库新增016迁移。
+
+## S4s 固定业务统计
+
+GET /api/statistics，仅GET，无分页。查询严格接受scope=personal|department（默认personal）、departmentId=UUID（可省略）、type=all|travel|purchase|reimbursement（默认all）、from/to真实日历日期（0001–9999，起止有序）。未知/重复/空/非法参数400 VALIDATION_ERROR，不接受status、角色、申请人或自定义类型。
+
+返回data={filters,applications,pendingTasks}。filters含实际scope/departmentId（未筛选null）/type/from/to（无边界null）、timeBasis:"submittedAt"、timezone:"Asia/Shanghai"。applications={total,statuses:{pending,approved,rejected,withdrawn},byType:[{type,total,statuses,approvedAmount,approvedAmountMissingCount}]}；pendingTasks={total,byType:[{type,count}]}。all按英文类型名排序返回三项，指定类型只返回一项，空结果返回对应零项。无跨类型金额总计，不含标题、人员、单号、来源或票据。
+
+personal仅本人申请；department仅有效department_head当前所属部门，省略部门自动填入，指定他部门403 STATISTICS_FORBIDDEN。管理员/财务/企业负责人无默认扩大范围；个人departmentId仅收窄本人历史，合法不存在UUID为零且不泄露部门存在性。pendingTasks在两种scope下始终仅调用者当前实际待办，排除本人申请、blocked/cancelled/已办或前序未通过任务。所有筛选对其对应申请生效，部门汇总不扩大正文/附件/审批权限。
+
+统一按submitted_at的上海日期首尾包含，草稿始终排除；不按创建、费用、批准或任务激活时间。状态是查询时当前状态，重提提交后独立计数。approvedAmount为各类型当前approved的精确两位小数字符串：采购明细总额、差旅预算、报销费用总额各自合计；没有通过记录为"0.00"，缺失金额的异常记录使该类型金额为null并增加approvedAmountMissingCount，不伪装成零或部分金额。数据、金额与待办同一SQL快照，查询不写入或标已读；跨请求可能变化。
+
+Cookie/Bearer和no-store沿既有约定；匿名/失效/停用401，待确认/无效部门403，组织锁后重验身份与角色。实现及真实签名见STATISTICS.md/HUMAN_HANDOFF.md。新增017索引；统计Web页面尚未接入，下一阶段S4t。
