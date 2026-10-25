@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 export type IconName =
+  | "chart"
   | "grid"
   | "home"
   | "document"
@@ -13,6 +14,7 @@ export type IconName =
   | "trash"
   | "upload";
 const shapes: Record<IconName, ReactNode> = {
+  chart: <path d="M4 3v17h17M8 16v-5m5 5V6m5 10V9" />,
   grid: (
     <g fill="currentColor" stroke="none">
       <rect x="3" y="3" width="8" height="8" rx="2" />

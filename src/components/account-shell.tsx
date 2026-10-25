@@ -73,6 +73,7 @@ export function AccountShell({
     { label: "我的申请", icon: "document" },
     { label: "我的待办", icon: "task" },
     { label: "通知中心", icon: "bell" },
+    { label: "查询统计", icon: "chart" },
   ];
   const management = pathname.startsWith("/admin/");
   const reimbursement = pathname.startsWith("/reimbursement/");
@@ -82,74 +83,80 @@ export function AccountShell({
     pathname.startsWith("/travel/tasks") ||
     pathname.startsWith("/purchase/tasks") ||
     pathname.startsWith("/reimbursement/tasks");
-  const title = reimbursement
-    ? taskList
-      ? "我的待办"
-      : ["/reimbursement/drafts", "/reimbursement/applications"].includes(
-            pathname,
-          )
-        ? "我的申请"
-        : pathname.startsWith("/reimbursement/applications/")
-          ? "报销申请详情"
-          : "报销申请"
-    : purchase
-      ? taskList
-        ? "我的待办"
-        : ["/purchase/drafts", "/purchase/applications"].includes(pathname)
-          ? "我的申请"
-          : pathname.startsWith("/purchase/applications/")
-            ? "采购申请详情"
-            : "采购申请"
-      : notifications
-        ? pathname === "/notifications"
-          ? "通知中心"
-          : "通知详情"
-        : taskList
+  const title =
+    pathname === "/statistics"
+      ? "查询统计"
+      : reimbursement
+        ? taskList
           ? "我的待办"
-          : travel
-            ? ["/travel/drafts", "/travel/applications"].includes(pathname)
+          : ["/reimbursement/drafts", "/reimbursement/applications"].includes(
+                pathname,
+              )
+            ? "我的申请"
+            : pathname.startsWith("/reimbursement/applications/")
+              ? "报销申请详情"
+              : "报销申请"
+        : purchase
+          ? taskList
+            ? "我的待办"
+            : ["/purchase/drafts", "/purchase/applications"].includes(pathname)
               ? "我的申请"
-              : pathname.startsWith("/travel/applications/")
-                ? "差旅申请详情"
-                : "差旅申请"
-            : pathname === "/admin/users"
-              ? "用户管理"
-              : pathname === "/admin/audit"
-                ? "操作审计"
-                : "个人信息";
-  const subtitle = reimbursement
-    ? taskList
-      ? "处理报销审批任务，查看已办记录"
-      : ["/reimbursement/drafts", "/reimbursement/applications"].includes(
-            pathname,
-          )
-        ? "查询本人报销申请，管理草稿与审批进度"
-        : pathname.startsWith("/reimbursement/applications/")
-          ? "查看费用、关联来源、票据与审批记录"
-          : "填写费用、关联已批申请并提交报销"
-    : purchase
-      ? taskList
-        ? "处理采购审批任务，查看已办记录"
-        : ["/purchase/drafts", "/purchase/applications"].includes(pathname)
-          ? "查询本人采购申请，管理草稿与审批进度"
-          : pathname.startsWith("/purchase/applications/")
-            ? "查看采购内容、审批进度与历史记录"
-            : "填写采购信息，提交后进入审批流程"
-      : notifications
-        ? "查看待办与审批结果，管理阅读状态"
-        : taskList
-          ? "处理当前审批任务，查看已办记录"
-          : travel
-            ? ["/travel/drafts", "/travel/applications"].includes(pathname)
-              ? "查询本人申请，管理草稿与审批进度"
-              : pathname.startsWith("/travel/applications/")
-                ? "查看申请内容、审批进度与历史记录"
-                : "填写差旅信息，提交后进入审批流程"
-            : pathname === "/admin/users"
-              ? "维护用户的部门归属与角色权限"
-              : pathname === "/admin/audit"
-                ? "查看授权与配置变更记录"
-                : "查看个人资料、部门与角色权限";
+              : pathname.startsWith("/purchase/applications/")
+                ? "采购申请详情"
+                : "采购申请"
+          : notifications
+            ? pathname === "/notifications"
+              ? "通知中心"
+              : "通知详情"
+            : taskList
+              ? "我的待办"
+              : travel
+                ? ["/travel/drafts", "/travel/applications"].includes(pathname)
+                  ? "我的申请"
+                  : pathname.startsWith("/travel/applications/")
+                    ? "差旅申请详情"
+                    : "差旅申请"
+                : pathname === "/admin/users"
+                  ? "用户管理"
+                  : pathname === "/admin/audit"
+                    ? "操作审计"
+                    : "个人信息";
+  const subtitle =
+    pathname === "/statistics"
+      ? "查看申请状态、本人待办与分类金额"
+      : reimbursement
+        ? taskList
+          ? "处理报销审批任务，查看已办记录"
+          : ["/reimbursement/drafts", "/reimbursement/applications"].includes(
+                pathname,
+              )
+            ? "查询本人报销申请，管理草稿与审批进度"
+            : pathname.startsWith("/reimbursement/applications/")
+              ? "查看费用、关联来源、票据与审批记录"
+              : "填写费用、关联已批申请并提交报销"
+        : purchase
+          ? taskList
+            ? "处理采购审批任务，查看已办记录"
+            : ["/purchase/drafts", "/purchase/applications"].includes(pathname)
+              ? "查询本人采购申请，管理草稿与审批进度"
+              : pathname.startsWith("/purchase/applications/")
+                ? "查看采购内容、审批进度与历史记录"
+                : "填写采购信息，提交后进入审批流程"
+          : notifications
+            ? "查看待办与审批结果，管理阅读状态"
+            : taskList
+              ? "处理当前审批任务，查看已办记录"
+              : travel
+                ? ["/travel/drafts", "/travel/applications"].includes(pathname)
+                  ? "查询本人申请，管理草稿与审批进度"
+                  : pathname.startsWith("/travel/applications/")
+                    ? "查看申请内容、审批进度与历史记录"
+                    : "填写差旅信息，提交后进入审批流程"
+                : pathname === "/admin/users"
+                  ? "维护用户的部门归属与角色权限"
+                  : pathname === "/admin/audit"
+                    ? "查看授权与配置变更记录"
+                    : "查看个人资料、部门与角色权限";
   return (
     <NotificationContext
       value={{ enabled: notificationsEnabled, refreshCount: unread.refresh }}
@@ -165,34 +172,39 @@ export function AccountShell({
           </Link>
           <nav aria-label="主导航">
             {futureLinks.map((link) =>
-              ["我的申请", "我的待办", "通知中心"].includes(link.label) &&
-              user.status === "active" ? (
+              ["我的申请", "我的待办", "通知中心", "查询统计"].includes(
+                link.label,
+              ) && user.status === "active" ? (
                 <Link
                   key={link.label}
                   className="nav-item"
                   href={
-                    link.label === "我的申请"
-                      ? reimbursement
-                        ? "/reimbursement/applications"
-                        : purchase
-                          ? "/purchase/applications"
-                          : "/travel/applications"
-                      : link.label === "我的待办"
+                    link.label === "查询统计"
+                      ? "/statistics"
+                      : link.label === "我的申请"
                         ? reimbursement
-                          ? "/reimbursement/tasks"
+                          ? "/reimbursement/applications"
                           : purchase
-                            ? "/purchase/tasks"
-                            : "/travel/tasks"
-                        : "/notifications"
+                            ? "/purchase/applications"
+                            : "/travel/applications"
+                        : link.label === "我的待办"
+                          ? reimbursement
+                            ? "/reimbursement/tasks"
+                            : purchase
+                              ? "/purchase/tasks"
+                              : "/travel/tasks"
+                          : "/notifications"
                   }
                   prefetch={false}
                   aria-current={
                     (
-                      link.label === "通知中心"
-                        ? notifications
-                        : link.label === "我的待办"
-                          ? taskList
-                          : (travel || purchase || reimbursement) && !taskList
+                      link.label === "查询统计"
+                        ? pathname === "/statistics"
+                        : link.label === "通知中心"
+                          ? notifications
+                          : link.label === "我的待办"
+                            ? taskList
+                            : (travel || purchase || reimbursement) && !taskList
                     )
                       ? "page"
                       : undefined

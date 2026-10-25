@@ -566,7 +566,7 @@ GET /api/reimbursement-applications 返回本人所有状态报销申请；GET /
 
 任务摘要为{id,seqNo,name,status,activatedAt,finishedAt,application:申请摘要}。pending只收实际当前人员且前序已通过、申请仍pending的已激活任务；handled只收本人approved/rejected，取消任务不计已办。同人两步按任务各计一条；task.status与application.status独立，例如已通过后撤回仍保留原通过结果。
 
-匿名/过期/停用会话401，有效待确认身份或无效部门403；管理员/财务角色不扩大本人范围，角色改变不替换冻结任务人员。所有成功响应no-store；列表只读，不自动标已读。组织锁后重验身份，条目/总数/版本/金额/无票数/当前节点同一SQL快照；后续动作仍须重读并验证taskId/version。类型/服务见reimbursement-lists.ts，HTTP边界见reimbursement-list-handlers.ts，完整说明见[REIMBURSEMENT_LISTS.md](REIMBURSEMENT_LISTS.md)。新增015索引；S4o/S4p已补报销草稿/提交详情，S4q已接列表审批页面，S4r已接固定报销复制重提，统计尚未实现。
+匿名/过期/停用会话401，有效待确认身份或无效部门403；管理员/财务角色不扩大本人范围，角色改变不替换冻结任务人员。所有成功响应no-store；列表只读，不自动标已读。组织锁后重验身份，条目/总数/版本/金额/无票数/当前节点同一SQL快照；后续动作仍须重读并验证taskId/version。类型/服务见reimbursement-lists.ts，HTTP边界见reimbursement-list-handlers.ts，完整说明见[REIMBURSEMENT_LISTS.md](REIMBURSEMENT_LISTS.md)。新增015索引；S4o/S4p已补报销草稿/提交详情，S4q已接列表审批页面，S4r已接固定报销复制重提，S4s/S4t已接固定统计接口与页面。
 
 ## S4o 报销草稿Web接入
 
@@ -600,4 +600,4 @@ personal仅本人申请；department仅有效department_head当前所属部门�
 
 统一按submitted_at的上海日期首尾包含，草稿始终排除；不按创建、费用、批准或任务激活时间。状态是查询时当前状态，重提提交后独立计数。approvedAmount为各类型当前approved的精确两位小数字符串：采购明细总额、差旅预算、报销费用总额各自合计；没有通过记录为"0.00"，缺失金额的异常记录使该类型金额为null并增加approvedAmountMissingCount，不伪装成零或部分金额。数据、金额与待办同一SQL快照，查询不写入或标已读；跨请求可能变化。
 
-Cookie/Bearer和no-store沿既有约定；匿名/失效/停用401，待确认/无效部门403，组织锁后重验身份与角色。实现及真实签名见STATISTICS.md/HUMAN_HANDOFF.md。新增017索引；统计Web页面尚未接入，下一阶段S4t。
+Cookie/Bearer和no-store沿既有约定；匿名/失效/停用401，待确认/无效部门403，组织锁后重验身份与角色。实现及真实签名见STATISTICS.md/HUMAN_HANDOFF.md。新增017索引；S4t已接入/statistics页面、URL筛选与状态图，Web说明见WEB_STATISTICS.md；接口契约未变。
