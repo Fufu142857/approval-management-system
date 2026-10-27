@@ -12,6 +12,7 @@ const projection = `SELECT n.id,n.app_id AS "appId",n.kind,n.title,n.created_at 
   CASE WHEN access.allowed THEN jsonb_build_object('type',a.type,'id',a.id,'status',a.status,
     'apiPath','/api/'||a.type||'-applications/'||a.id::text) ELSE NULL END AS target,
   CASE WHEN access.allowed AND t.id IS NOT NULL THEN jsonb_build_object('id',t.id,'status',t.status) ELSE NULL END AS task`;
+// TODO(S5-人工): 自定义申请接入通知时核对这里的固定业务白名单、关联及上方apiPath；自行完成正文权限，不能只放开类型。
 const targetJoins = `JOIN applications a ON a.id=n.app_id
   LEFT JOIN approval_instances i ON i.app_id=a.id
   LEFT JOIN approval_tasks t ON t.instance_id=i.id AND t.approver_id=$1

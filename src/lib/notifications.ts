@@ -17,6 +17,7 @@ export type NotificationItem = {
   title: string;
   createdAt: string;
   readAt: string | null;
+  // TODO(S5-人工): 自定义申请通知接入时，自行补充目标类型，并与服务端授权及页面跳转保持一致。
   target: {
     type: "travel" | "purchase" | "reimbursement";
     id: string;

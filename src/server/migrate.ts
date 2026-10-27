@@ -4,6 +4,7 @@ import path from "node:path";
 import { transaction } from "./db";
 
 export async function migrate() {
+  // TODO(S5-人工): 在 db/migrations 新增后续编号迁移，自行完成模板/字段/节点/版本及自定义申请存储和既有表兼容；不要改写001–017，也不要在这里直接建业务表。
   const directory = path.join(process.cwd(), "db/migrations");
   const files = (await readdir(directory))
     .filter((name) => name.endsWith(".sql"))

@@ -68,6 +68,7 @@ export function AccountShell({
   const notifications =
     pathname === "/notifications" || pathname.startsWith("/notifications/");
   const admin = user.status === "active" && user.roles.includes("system_admin");
+  // TODO(S5-人工): 人工页面/API完成后，接入模板管理与自定义申请/待办入口，并补本组件对应的路由、标题、选中状态和管理权限显示。
   const futureLinks: { label: string; icon: IconName }[] = [
     { label: "工作台", icon: "home" },
     { label: "我的申请", icon: "document" },

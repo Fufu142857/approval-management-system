@@ -268,6 +268,7 @@ export function NotificationListPanel({
     </div>
   );
 }
+// TODO(S5-人工): 自定义申请详情页面完成后，补充本组件下方固定类型白名单及详情链接；通知接收权限不等于正文权限。
 export function NotificationDetailPanel({ id }: { id: string }) {
   const { enabled, refreshCount } = useNotifications();
   useEffect(() => {
